@@ -1,0 +1,29 @@
+matrix NumericMatrix {
+    types: [uint, int, double, char]
+    ops: [+, *, inv]
+    subops: [
+        all + all >> infer: default;
+        all * all >> infer: default;
+    ]
+};
+
+uint COLS = 5;
+uint ROWS = 4;
+
+NumericMatrix A, B, C;
+init A 0.0;
+init B random;
+init C enumerate;
+
+// applying a lambda function with enumerate for more flexibility
+apply C all >> infer:(old) {
+    if old % 2 == 0
+    return 1;
+    return 0;
+}
+
+FILE out = stdout;
+write out A + B * C;
+write out A[1:3, 0:2];
+write out sum A all;
+write out sum A col;    // return a row vector

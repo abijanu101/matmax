@@ -1,0 +1,28 @@
+matrix StringMatrix {
+    types: [char, string]
+    ops: [+]
+    subops: [
+        string + string >> infer: string;
+        char + string >> infer: string;
+        string + char >> infer: string;
+    ]
+};
+
+uint COLS = 3;
+uint ROWS = 3;
+
+StringMatrix A, B, C;
+init A "";
+init B enumerate;
+init C "hello";
+
+apply C all >> infer:(old) {
+return "Hello, " + old;
+}
+
+FILE out = stdout;
+write out A + B;
+write out vstack A B;
+write out hstack A B;
+write out sum A;        // prints a very long flattened string (row-major flattening)
+write out tran C;

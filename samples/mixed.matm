@@ -1,0 +1,37 @@
+matrix MixedMatrix {
+    types: [uint, double, str]
+    ops: [+, *]
+    subops: [
+        [uint, double] + [uint, double] >> infer: default;
+        [uint, double] * [uint, double] >> infer: default;
+
+        // custom subop
+        uint * str >> str: commute (num, string) {
+            str result = "";
+            for i inrange num:
+                result += string;
+            ret result;
+        }
+    ]
+};
+
+uint COLS = 3;
+uint ROWS = 3;
+
+MixedMatrix A, B, C;
+init A enumerate;
+init B 2.0;
+init C "x";
+
+apply A all >> infer:(old) {
+if old % 2 == 0
+return "even";
+return old;
+}
+
+FILE out = stdout;
+write out A;
+write out A * C;
+write out B + B;
+write out vstack A C;
+write out sum C;

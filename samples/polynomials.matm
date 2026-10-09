@@ -1,0 +1,48 @@
+// Polynomial as a matrix [7, 8, 9] -> 9x^2 + 8x + 7
+matrix Polynomial {
+    types: [double]
+    ops: [+, -, *, derivative]
+
+    subops: default // shorthand for "all opo all >> infer: default" 
+
+    customs: [
+        // custom unary operators
+        derivative Polynomial >> infer: Polynomial: (p) {
+            uint n = len p;
+
+            if n <= 1:
+                ret [0.0];
+
+            doubleMatrix result = zeros(1, n - 1);
+
+            for i inrange n - 1:
+                result[0, i] = (i + 1) * p[0, i + 1];
+
+            ret normalize(result);
+        }
+    ]
+};
+
+// nested classes
+matrix PolynomialMatrix {
+    types: [Polynomial]
+    ops: [+, -, *]
+
+    subops: [
+        Polynomial + Polynomial >> infer: default;
+        Polynomial - Polynomial >> infer: default;
+        Polynomial * Polynomial >> infer: default;
+    ]
+
+    customs: [
+        mul PolynomialMatrix int >> PolynomialMatrix: (M, k) {
+            PolynomialMatrix result = zeros(rows M, cols M);
+
+            for i in inrange rows M:
+                for j in inrange cols M:
+                    result[i, j] = M[i, j] * k;
+
+            ret result;
+        }
+    ]
+};
