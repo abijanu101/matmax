@@ -20,12 +20,9 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    int lastval = -1;
-    do {
-        lastval = yylex();
-        printf("%d ", lastval);
-    } while (lastval != 0);
+
+
+    printf("\n");
     fclose(yyin);
-    printf("Scan completed\n");
     return 0;
 }

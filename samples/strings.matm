@@ -20,7 +20,7 @@ apply C all >> infer:(old) {
 ret "Hello, " + old;
 }
 
-FILE out = stdout;
+file out = stdout;
 write out A + B;
 write out vstack A B;
 write out hstack A B;

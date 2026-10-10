@@ -22,7 +22,7 @@ apply C all >> infer:(old) {
     ret 0;
 }
 
-FILE out = stdout;
+file out = stdout;
 write out A + B * C;
 write out A[1:3, 0:2];
 write out sum A all;

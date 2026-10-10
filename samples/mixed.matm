@@ -29,7 +29,7 @@ apply A all >> infer:(old) {
     ret old;
 }
 
-FILE out = stdout;
+file out = stdout;
 write out A;
 write out A * C;
 write out B + B;

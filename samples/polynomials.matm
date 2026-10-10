@@ -38,8 +38,8 @@ matrix PolynomialMatrix {
         mul PolynomialMatrix int >> PolynomialMatrix: (M, k) {
             PolynomialMatrix result = zeros(rows M, cols M);
 
-            for i in inrange rows M:
-                for j in inrange cols M:
+            for i inrange rows M:
+                for j inrange cols M:
                     result[i, j] = M[i, j] * k;
 
             ret result;
