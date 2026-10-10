@@ -1,0 +1,5 @@
+int a = 7;
+int b = 8;
+
+FILE out = stdout;
+write out a + b

@@ -17,7 +17,7 @@ init B enumerate;
 init C "hello";
 
 apply C all >> infer:(old) {
-return "Hello, " + old;
+ret "Hello, " + old;
 }
 
 FILE out = stdout;

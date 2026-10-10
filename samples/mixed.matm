@@ -24,9 +24,9 @@ init B 2.0;
 init C "x";
 
 apply A all >> infer:(old) {
-if old % 2 == 0
-return "even";
-return old;
+    if old % 2 == 0:
+        ret "even";
+    ret old;
 }
 
 FILE out = stdout;
