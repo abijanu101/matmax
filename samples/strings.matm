@@ -17,12 +17,12 @@ init B enumerate;
 init C "hello";
 
 apply C all >> infer:(old) {
-ret "Hello, " + old;
+    ret "Hello, " + old;
 }
 
 file out = stdout;
 write out A + B;
-write out vstack A B;
-write out hstack A B;
+write out vstack(A, B);
+write out hstack(A, B);
 write out sum A;        // prints a very long flattened string (row-major flattening)
 write out tran C;

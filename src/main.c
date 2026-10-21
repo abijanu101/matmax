@@ -22,7 +22,7 @@ int main(int argc, char **argv) {
 
 
 
-    printf("\n");
+    int result = yyparse();
     fclose(yyin);
-    return 0;
+    return result == 0 ? 0 : 1;
 }

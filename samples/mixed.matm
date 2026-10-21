@@ -1,15 +1,15 @@
 matrix MixedMatrix {
-    types: [uint, double, str]
+    types: [uint, double, string]
     ops: [+, *]
     subops: [
         [uint, double] + [uint, double] >> infer: default;
         [uint, double] * [uint, double] >> infer: default;
 
         // custom subop
-        uint * str >> str: commute (num, string) {
-            str result = "";
+        uint * string >> string: commute (num, text) {
+            string result = "";
             for i inrange num:
-                result += string;
+                result += text;
             ret result;
         }
     ]
@@ -33,5 +33,5 @@ file out = stdout;
 write out A;
 write out A * C;
 write out B + B;
-write out vstack A C;
+write out vstack(A, C);
 write out sum C;

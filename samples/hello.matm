@@ -3,5 +3,5 @@ int b = 8;
 
 int variablewithintinthename = a + b;
 
-FILE out = stdout;
+file out = stdout;
 write out variablewithintinthename;

@@ -3,17 +3,17 @@ matrix Polynomial {
     types: [double]
     ops: [+, -, *, derivative]
 
-    subops: default // shorthand for "all opo all >> infer: default" 
+    subops: default // shorthand for "all op all >> infer: default" 
 
     customs: [
         // custom unary operators
         derivative Polynomial >> infer: Polynomial: (p) {
-            uint n = len p;
+            uint n = len(p);
 
             if n <= 1:
                 ret [0.0];
 
-            doubleMatrix result = zeros (1, n - 1);
+            Polynomial result = zeros (1, n - 1);
 
             for i inrange n - 1:
                 result[0, i] = (i + 1) * p[0, i + 1];
@@ -36,10 +36,10 @@ matrix PolynomialMatrix {
 
     customs: [
         mul PolynomialMatrix int >> PolynomialMatrix: (M, k) {
-            PolynomialMatrix result = zeros(rows M, cols M);
+            PolynomialMatrix result = zeros(rows(M), cols(M));
 
-            for i inrange rows M:
-                for j inrange cols M:
+            for i inrange rows(M):
+                for j inrange cols(M):
                     result[i, j] = M[i, j] * k;
 
             ret result;

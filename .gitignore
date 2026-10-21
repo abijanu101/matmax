@@ -1,6 +1,6 @@
-build/lex.c
-build/parse.c
-build/parse.h
-
-build/*.o
-build/*.obj
+src/parse.tab.c
+src/parse.tab.h
+src/lex.yy.c
+src/matmax
+*.o
+*.output
