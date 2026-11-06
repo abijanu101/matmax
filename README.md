@@ -5,7 +5,7 @@ a simple DSL for matrix manipulation, our Compiler Construction course project f
 | Contributor | ID |
 | :--- | :--- |
 | Ch. Abdul Rehman | 23L-0577 |
-| Areeba Naeem | 23L-9656 |
+| Areeba Naeem | 23L-0656 |
 | Eman Naeem | 23F-0808 |
 
 
