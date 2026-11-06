@@ -1,6 +1,6 @@
 
 %{
-#include "parse.tab.h"
+#include "parse.h"   /* bison -d -o build/parse.c writes build/parse.h */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,6 +9,7 @@
 %option noyywrap
 %option nounput
 %option noinput
+%option yylineno
 
 %%
 

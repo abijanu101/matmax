@@ -27,8 +27,6 @@ const char *token_name(int token) {
         case CHAR: return "CHAR";
         case STRING: return "STRING";
         
-        case COMMENT: return "COMMENT";
-
         case FOR: return "FOR";
         case INRANGE: return "INRANGE";
         case IF: return "IF";
@@ -45,6 +43,13 @@ const char *token_name(int token) {
         case SUM: return "SUM";
         case MIN: return "MIN";
         case MAX: return "MAX";
+        
+        case LEN: return "LEN";
+        case ROWS: return "ROWS";
+        case COLS: return "COLS";
+        case COL: return "COL";
+        case ROW: return "ROW";
+
         case HSTACK: return "HSTACK";
         case VSTACK: return "VSTACK";
         case WRITE: return "WRITE";
