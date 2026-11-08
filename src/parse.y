@@ -420,7 +420,19 @@ mul_expr
     ;
 
 unary
-    : MINUS unary                   { $$ = ast_make(N_NEG, NULL, 1, $2); }
+    : MINUS unary
+        {
+            /* -5 and -1.5 become negative literals; -x stays a NEG node */
+            if ($2->kind == N_UINT) {
+                $$ = ast_int(-(int)$2->uval);
+                ast_free($2);
+            } else if ($2->kind == N_DOUBLE) {
+                $2->dval = -$2->dval;
+                $$ = $2;
+            } else {
+                $$ = ast_make(N_NEG, NULL, 1, $2);
+            }
+        }
     | prefix_expr                   { $$ = $1; }
     | postfix                       { $$ = $1; }
     ;
