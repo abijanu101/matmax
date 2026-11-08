@@ -71,10 +71,10 @@ typedef enum {
     N_DOUBLE,        /* dval                                                   */
     N_CHAR,          /* cval                                                   */
     N_STRING         /* text = the string without quotes                       */
-} NodeKind;
+} ParserNodeKind;
 
-typedef struct ASTNode {
-    NodeKind kind;
+typedef struct ParserASTNode {
+    ParserNodeKind kind;
     char *text;
 
     int ival;
@@ -84,36 +84,36 @@ typedef struct ASTNode {
 
     int nchildren;
     int capacity;
-    struct ASTNode **children;
+    struct ParserASTNode **children;
 
     int line;        /* source line where the node was created */
-} ASTNode;
+} ParserASTNode;
 
 /* Make a node with no children. `text` is copied (may be NULL). */
-ASTNode *ast_new(NodeKind kind, const char *text);
+ParserASTNode *ast_new(ParserNodeKind kind, const char *text);
 
 /* Append `child` to `parent`, return `parent` (so calls can be chained). */
-ASTNode *ast_add(ASTNode *parent, ASTNode *child);
+ParserASTNode *ast_add(ParserASTNode *parent, ParserASTNode *child);
 
 /* Put `child` in FRONT of the existing children, return `parent`. */
-ASTNode *ast_prepend(ASTNode *parent, ASTNode *child);
+ParserASTNode *ast_prepend(ParserASTNode *parent, ParserASTNode *child);
 
 /* Make a node and attach `n` children in one call:
        ast_make(N_BINOP, "+", 2, left, right)                              */
-ASTNode *ast_make(NodeKind kind, const char *text, int n, ...);
+ParserASTNode *ast_make(ParserNodeKind kind, const char *text, int n, ...);
 
 /* Literal helpers */
-ASTNode *ast_int(int v);
-ASTNode *ast_uint(unsigned int v);
-ASTNode *ast_double(double v);
-ASTNode *ast_char(char v);
+ParserASTNode *ast_int(int v);
+ParserASTNode *ast_uint(unsigned int v);
+ParserASTNode *ast_double(double v);
+ParserASTNode *ast_char(char v);
 
-const char *ast_kind_name(NodeKind kind);
-void ast_print(const ASTNode *node, int depth);   /* indented text dump  */
-void ast_to_dot(const ASTNode *root, FILE *out);  /* Graphviz drawing    */
-void ast_free(ASTNode *node);
+const char *ast_kind_name(ParserNodeKind kind);
+void ast_print(const ParserASTNode *node, int depth);   /* indented text dump  */
+void ast_to_dot(const ParserASTNode *root, FILE *out);  /* Graphviz drawing    */
+void ast_free(ParserASTNode *node);
 
 /* The parser stores the finished tree here (defined in parse.y). */
-extern ASTNode *ast_root;
+extern ParserASTNode *ast_root;
 
 #endif

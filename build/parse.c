@@ -71,13 +71,13 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include "ast.h"
+#include "ast/parser/ast.h"
 
 extern int yylex(void);
 extern int yylineno;
 void yyerror(const char *s);
 
-ASTNode *ast_root = NULL;   /* the finished tree, read by main.c */
+ParserASTNode *ast_root = NULL;   /* the finished tree, read by main.c */
 
 #line 83 "build/parse.c"
 
@@ -2453,7 +2453,7 @@ yyreduce:
   case 79: /* apply_stmt: APPLY IDENTIFIER region_opt TO INFER COLON LPAREN IDENTIFIER RPAREN block  */
 #line 343 "src/parse.y"
         {
-            ASTNode *params = ast_make(N_PARAMS, NULL, 1, ast_new(N_ID, (yyvsp[-2].ascii_string)));
+            ParserASTNode *params = ast_make(N_PARAMS, NULL, 1, ast_new(N_ID, (yyvsp[-2].ascii_string)));
             (yyval.node) = ast_make(N_APPLY, (yyvsp[-8].ascii_string), 2, (yyvsp[-7].node),
                           ast_make(N_FUNC, NULL, 2, params, (yyvsp[0].node)));
             free((yyvsp[-8].ascii_string));

@@ -19,20 +19,20 @@
  */
 
 %code requires {
-    /* goes into parse.h, so the lexer also knows what an ASTNode is */
-    #include "ast.h"
+    /* goes into parse.h, so the lexer also knows what an ParserASTNode is */
+    #include "ast/parser/ast.h"
 }
 
 %{
 #include <stdio.h>
 #include <stdlib.h>
-#include "ast.h"
+#include "ast/parser/ast.h"
 
 extern int yylex(void);
 extern int yylineno;
 void yyerror(const char *s);
 
-ASTNode *ast_root = NULL;   /* the finished tree, read by main.c */
+ParserASTNode *ast_root = NULL;   /* the finished tree, read by main.c */
 %}
 
 %define parse.error verbose
@@ -44,7 +44,7 @@ ASTNode *ast_root = NULL;   /* the finished tree, read by main.c */
     unsigned int unsigned_integer;
     double floating;
 
-    struct ASTNode *node;   /* value of almost every non-terminal          */
+    struct ParserASTNode *node;   /* value of almost every non-terminal          */
     const char *op_text;    /* constant operator text like "+" or "==",
                                used by bin_op / cmp_op, never freed         */
 }
@@ -341,7 +341,7 @@ apply_stmt
     : APPLY IDENTIFIER region_opt TO INFER COLON
       LPAREN IDENTIFIER RPAREN block
         {
-            ASTNode *params = ast_make(N_PARAMS, NULL, 1, ast_new(N_ID, $8));
+            ParserASTNode *params = ast_make(N_PARAMS, NULL, 1, ast_new(N_ID, $8));
             $$ = ast_make(N_APPLY, $2, 2, $3,
                           ast_make(N_FUNC, NULL, 2, params, $10));
             free($2);

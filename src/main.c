@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
-#include "ast.h"
+#include "ast/parser/ast.h"
 
 extern int yyparse(void);
 extern FILE* yyin;

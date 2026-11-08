@@ -47,8 +47,8 @@ extern int yydebug;
 /* "%code requires" blocks.  */
 #line 21 "src/parse.y"
 
-    /* goes into parse.h, so the lexer also knows what an ASTNode is */
-    #include "ast.h"
+    /* goes into parse.h, so the lexer also knows what an ParserASTNode is */
+    #include "ast/parser/ast.h"
 
 #line 54 "build/parse.h"
 
@@ -142,7 +142,7 @@ union YYSTYPE
     unsigned int unsigned_integer;
     double floating;
 
-    struct ASTNode *node;   /* value of almost every non-terminal          */
+    struct ParserASTNode *node;   /* value of almost every non-terminal          */
     const char *op_text;    /* constant operator text like "+" or "==",
                                used by bin_op / cmp_op, never freed         */
 

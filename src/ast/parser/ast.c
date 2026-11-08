@@ -9,8 +9,8 @@ extern int yylineno;   /* current line, kept by flex (%option yylineno) */
 /*  Building                                                          */
 /* ------------------------------------------------------------------ */
 
-ASTNode *ast_new(NodeKind kind, const char *text) {
-    ASTNode *n = calloc(1, sizeof(ASTNode));
+ParserASTNode *ast_new(ParserNodeKind kind, const char *text) {
+    ParserASTNode *n = (ParserASTNode*)calloc(1, sizeof(ParserASTNode));
     if (!n) { perror("calloc"); exit(1); }
     n->kind = kind;
     n->text = text ? strdup(text) : NULL;
@@ -18,47 +18,47 @@ ASTNode *ast_new(NodeKind kind, const char *text) {
     return n;
 }
 
-ASTNode *ast_add(ASTNode *parent, ASTNode *child) {
+ParserASTNode *ast_add(ParserASTNode *parent, ParserASTNode *child) {
     if (!parent || !child) return parent;
     if (parent->nchildren == parent->capacity) {
         parent->capacity = parent->capacity ? parent->capacity * 2 : 4;
-        parent->children = realloc(parent->children,
-                                   parent->capacity * sizeof(ASTNode *));
+        parent->children = (ParserASTNode**)realloc(parent->children,
+                                   parent->capacity * sizeof(ParserASTNode *));
         if (!parent->children) { perror("realloc"); exit(1); }
     }
     parent->children[parent->nchildren++] = child;
     return parent;
 }
 
-ASTNode *ast_prepend(ASTNode *parent, ASTNode *child) {
+ParserASTNode *ast_prepend(ParserASTNode *parent, ParserASTNode *child) {
     if (!parent || !child) return parent;
     ast_add(parent, child);                       /* make room at the end */
     memmove(&parent->children[1], &parent->children[0],
-            (parent->nchildren - 1) * sizeof(ASTNode *));
+            (parent->nchildren - 1) * sizeof(ParserASTNode *));
     parent->children[0] = child;                  /* then shift it to [0] */
     return parent;
 }
 
-ASTNode *ast_make(NodeKind kind, const char *text, int n, ...) {
-    ASTNode *node = ast_new(kind, text);
+ParserASTNode *ast_make(ParserNodeKind kind, const char *text, int n, ...) {
+    ParserASTNode *node = ast_new(kind, text);
     va_list args;
     va_start(args, n);
     for (int i = 0; i < n; i++)
-        ast_add(node, va_arg(args, ASTNode *));
+        ast_add(node, va_arg(args, ParserASTNode *));
     va_end(args);
     return node;
 }
 
-ASTNode *ast_int(int v)             { ASTNode *n = ast_new(N_INT, NULL);    n->ival = v; return n; }
-ASTNode *ast_uint(unsigned int v)   { ASTNode *n = ast_new(N_UINT, NULL);   n->uval = v; return n; }
-ASTNode *ast_double(double v)       { ASTNode *n = ast_new(N_DOUBLE, NULL); n->dval = v; return n; }
-ASTNode *ast_char(char v)           { ASTNode *n = ast_new(N_CHAR, NULL);   n->cval = v; return n; }
+ParserASTNode *ast_int(int v)             { ParserASTNode *n = ast_new(N_INT, NULL);    n->ival = v; return n; }
+ParserASTNode *ast_uint(unsigned int v)   { ParserASTNode *n = ast_new(N_UINT, NULL);   n->uval = v; return n; }
+ParserASTNode *ast_double(double v)       { ParserASTNode *n = ast_new(N_DOUBLE, NULL); n->dval = v; return n; }
+ParserASTNode *ast_char(char v)           { ParserASTNode *n = ast_new(N_CHAR, NULL);   n->cval = v; return n; }
 
 /* ------------------------------------------------------------------ */
 /*  Names (used by the printer and the drawing)                       */
 /* ------------------------------------------------------------------ */
 
-const char *ast_kind_name(NodeKind kind) {
+const char *ast_kind_name(ParserNodeKind kind) {
     switch (kind) {
         case N_PROGRAM:       return "PROGRAM";
         case N_MATRIX_DEF:    return "MATRIX_DEF";
@@ -107,7 +107,7 @@ const char *ast_kind_name(NodeKind kind) {
 }
 
 /* Writes the node's value ("A", "+", 3.5, 'x', ...) into buf. */
-static void node_value(const ASTNode *n, char *buf, size_t size) {
+static void node_value(const ParserASTNode *n, char *buf, size_t size) {
     buf[0] = '\0';
     switch (n->kind) {
         case N_INT:    snprintf(buf, size, "%d", n->ival); break;
@@ -129,7 +129,7 @@ static void node_value(const ASTNode *n, char *buf, size_t size) {
 /*  Text dump                                                         */
 /* ------------------------------------------------------------------ */
 
-void ast_print(const ASTNode *node, int depth) {
+void ast_print(const ParserASTNode *node, int depth) {
     if (!node) return;
     char value[256];
     node_value(node, value, sizeof value);
@@ -154,7 +154,7 @@ static void dot_escaped(FILE *out, const char *s) {
     }
 }
 
-static int dot_node(const ASTNode *n, FILE *out, int *counter) {
+static int dot_node(const ParserASTNode *n, FILE *out, int *counter) {
     int id = (*counter)++;
     char value[256];
     node_value(n, value, sizeof value);
@@ -170,7 +170,7 @@ static int dot_node(const ASTNode *n, FILE *out, int *counter) {
     return id;
 }
 
-void ast_to_dot(const ASTNode *root, FILE *out) {
+void ast_to_dot(const ParserASTNode *root, FILE *out) {
     int counter = 0;
     fprintf(out, "digraph AST {\n");
     fprintf(out, "  node [shape=box, style=\"rounded,filled\", fillcolor=\"#eef3fb\", fontname=\"Helvetica\"];\n");
@@ -182,7 +182,7 @@ void ast_to_dot(const ASTNode *root, FILE *out) {
 /*  Cleanup                                                           */
 /* ------------------------------------------------------------------ */
 
-void ast_free(ASTNode *node) {
+void ast_free(ParserASTNode *node) {
     if (!node) return;
     for (int i = 0; i < node->nchildren; i++)
         ast_free(node->children[i]);
