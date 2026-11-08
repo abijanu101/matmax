@@ -1,23 +1,26 @@
 #include "sema.hpp"
+#include "../symbols/semantic_environment.hpp"
+#include "passes/passes.hpp"
 
-#include "passes/name_resolution.hpp"
-#include "passes/type_analysis.hpp"
-#include "passes/inference_resolution.hpp"
-#include "passes/memory_layout.hpp"
-
-SemanticResult analyze(ParserASTNode *tree)
+SemanticResult *analyze(ParserASTNode *tree)
 {
-    SymbolTable st;
+    SemanticEnvironment e;
+    SemanticResult* res = new SemanticResult();
+
+    DeclarationScanningVisitor v1;
+    // visit code here
+
+    NameResolutionVisitor v2;
+    // visit code here
+
+    TypeAnalysisVisitor v3;
+    // visit code here
     
+    InferenceResolutionVisitor v4;
+    // visit code here, produces new tree 
 
-    NameResolutionVisitor v1;
+    MemoryLayoutVisitor v5;
+    // visits newly created tree (res->tree)
 
-    TypeAnalysisVisitor v2;
-    
-    InferenceResolutionVisitor v3;
-
-    // new resolved tree made
-
-    MemoryLayoutVisitor v4;
-
+    return res;
 }

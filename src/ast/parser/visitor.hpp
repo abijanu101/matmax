@@ -61,7 +61,7 @@ public:
     virtual void visit_string(ParserASTNode *) = 0;
 };
 
-void dispatch(ParserASTNode *node, ParserASTVisitor &visitor)
+inline void dispatch(ParserASTNode *node, ParserASTVisitor &visitor)
 {
     if (!node)
         return;

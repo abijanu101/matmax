@@ -1,7 +1,4 @@
-src/parse.tab.c
-src/parse.tab.h
-src/lex.yy.c
-src/matmax
-build/*.o
 build/*.c
 build/*.h
+build/*.a
+build/*.o

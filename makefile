@@ -1,34 +1,55 @@
-CFLAGS = -Wall -Isrc -Isrc/ast/parser -Isrc/ast/resolved -Isrc/sema -Isrc/sema/passes
-# Include paths let headers find each other cleanly.
+CXX = g++
+CXXFLAGS = -Wall -Isrc -Isrc/ast/parser -Isrc/ast/resolved -Isrc/sema -Isrc/sema/passes
 
-all: main test_lex test_parse lex parse shared sema
-	g++ build/main.o build/parse.o build/lex.o build/ast_parser.o build/symbol_table.o build/sema.o -o build/main.out
-	g++ build/test_lex.o build/parse.o build/lex.o build/ast_parser.o build/symbol_table.o build/sema.o -o build/test_lex.out
-	g++ build/test_parse.o build/parse.o build/lex.o build/ast_parser.o build/symbol_table.o build/sema.o -o build/test_parse.out
+.PHONY: all frontend semantic tests clean
 
-main: src/main.c parse
-	g++ $(CFLAGS) -c src/main.c -o build/main.o
+all: build/main.out tests
 
-test_parse: validation/test_parse.c parse
-	g++ $(CFLAGS) -c validation/test_parse.c -o build/test_parse.o
+# Compilation
+build/%.o: src/%.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+build/%.o: src/%.c
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+build/%.o: build/%.c
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+build/sema.o: src/sema/sema.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+build/%.o: src/sema/passes/%.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-test_lex: validation/test_lex.c parse
-	g++ $(CFLAGS) -c validation/test_lex.c -o build/test_lex.o
+# Commons
+build/%_parser.o: src/ast/parser/%.c
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+build/%_resolved.o: src/ast/resolved/%.cpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-lex: parse src/lex.l
-	flex -o build/lex.c src/lex.l
-	g++ $(CFLAGS) -c build/lex.c -o build/lex.o
+# Generation
+build/parse.h build/parse.c &: src/parse.y build/ast_parser.o
+	bison -d -o build/parse.c $<
+build/lex.c: src/lex.l build/parse.h
+	flex -o $@ $<
+frontend: build/parse.o build/lex.o build/ast_parser.o
 
-parse: src/parse.y
-	bison -d -o build/parse.c src/parse.y
-	g++ $(CFLAGS) -c build/parse.c -o build/parse.o
+# Semantic Analysis
+SEMANTIC = build/sema.o build/ast_resolved.o \
+			build/declaration_scanning.o build/symbol_resolution.o \
+			build/type_analysis.o build/inference_resolution.o
+build/libsema.a: $(SEMANTIC)
+	ar rcs $@ $^
+semantic: build/libsema.a
 
-shared:
-	g++ $(CFLAGS) -c src/ast/parser/ast.c -o build/ast_parser.o
-	g++ $(CFLAGS) -c src/symbol_table/symbol_table.cpp -o build/symbol_table.o
+# Tests
+tests: build/test_lex.out build/test_parse.out
+build/test_%.o: validation/test_%.c
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-sema: shared
-	g++ $(CFLAGS) -c src/sema/sema.cpp -o build/sema.o
+# Entry Points
+build/main.out: build/main.o frontend semantic
+	$(CXX) build/main.o build/parse.o build/lex.o build/ast_parser.o build/libsema.a -o $@
+build/test_lex.out: build/test_lex.o frontend
+	$(CXX) build/test_lex.o build/parse.o build/lex.o build/ast_parser.o -o $@
+build/test_parse.out: build/test_parse.o frontend
+	$(CXX) build/test_parse.o build/parse.o build/lex.o build/ast_parser.o -o $@
 
 clean:
 	rm -f build/*
