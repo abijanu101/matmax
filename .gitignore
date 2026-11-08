@@ -2,5 +2,6 @@ src/parse.tab.c
 src/parse.tab.h
 src/lex.yy.c
 src/matmax
-*.o
-*.output
+build/*.o
+build/*.c
+build/*.h
