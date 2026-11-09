@@ -103,14 +103,9 @@ stdin       return STDIN;
     return CHAR_LITERAL;
 }
 
-[+-]?[0-9]+\.[0-9]+([eE][+-]?[0-9]+)? {
+[0-9]+\.[0-9]+([eE][+-]?[0-9]+)? {
     yylval.floating = atof(yytext);
     return DOUBLE_LITERAL;
-}
-
-[+-][0-9]+ {
-    yylval.signed_integer = atoi(yytext);
-    return INT_LITERAL;
 }
 
 [0-9]+ {
