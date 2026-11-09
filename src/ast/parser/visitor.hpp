@@ -3,6 +3,8 @@
 class ParserASTVisitor
 {
 public:
+    virtual ~ParserASTVisitor() = default;
+
     // ---- top-level definitions ----
     virtual void visit_program(ParserASTNode *) = 0;
     virtual void visit_matrix_def(ParserASTNode *) = 0;

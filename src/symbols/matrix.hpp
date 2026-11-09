@@ -16,6 +16,7 @@ enum class OperationKind
     Custom
 };
 
+class MatrixClass;
 
 // A fully resolved function associated with a particular matrix class.
 class MatrixOperation : public Function

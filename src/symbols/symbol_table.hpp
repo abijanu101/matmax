@@ -18,7 +18,7 @@ public:
     void push(Symbol *sym) { st.push_back(sym); }
     Symbol* get(int idx)
     {
-        assert(idx < st.size());
+        assert(idx < (int)st.size());
         return st[idx];
     }
 };

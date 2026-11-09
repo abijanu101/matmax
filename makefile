@@ -32,15 +32,18 @@ frontend: build/parse.o build/lex.o build/ast_parser.o
 
 # Semantic Analysis
 SEMANTIC = build/sema.o build/ast_resolved.o \
-			build/declaration_scanning.o build/symbol_resolution.o \
-			build/type_analysis.o build/inference_resolution.o
+			build/normalizing.o build/declaration_scanning.o \
+			build/name_resolution.o build/type_analysis.o \
+			build/operator_resolution.o
 build/libsema.a: $(SEMANTIC)
 	ar rcs $@ $^
 semantic: build/libsema.a
 
 # Tests
-tests: build/test_lex.out build/test_parse.out
+tests: build/test_lex.out build/test_parse.out build/test_resolved.out
 build/test_%.o: validation/test_%.c
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+build/test_%.o: validation/test_%.cpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 # Entry Points
@@ -50,6 +53,8 @@ build/test_lex.out: build/test_lex.o frontend
 	$(CXX) build/test_lex.o build/parse.o build/lex.o build/ast_parser.o -o $@
 build/test_parse.out: build/test_parse.o frontend
 	$(CXX) build/test_parse.o build/parse.o build/lex.o build/ast_parser.o -o $@
+build/test_resolved.out: build/test_resolved.o frontend semantic
+	$(CXX) build/test_resolved.o build/parse.o build/lex.o build/ast_parser.o build/libsema.a -o $@
 
 clean:
 	rm -f build/*

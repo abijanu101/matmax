@@ -5,7 +5,11 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
-#include "../ast/resolved/ast.hpp"
+
+// Shit I need
+class ResolvedASTNode;
+
+// Shit I Define
 
 class Type;
 class Variable;

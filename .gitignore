@@ -2,3 +2,4 @@ build/*.c
 build/*.h
 build/*.a
 build/*.o
+build/*.out
