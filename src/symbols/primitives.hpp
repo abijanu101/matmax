@@ -8,7 +8,8 @@ inline Type primitive_types[] = {
     Type("uint"),
     Type("double"),
     Type("char"),
-    Type("string")
+    Type("string"),
+    Type("file")
 };
 
 #endif

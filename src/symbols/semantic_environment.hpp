@@ -46,6 +46,23 @@ public:
 
         throw UndefinedError(name, line);
     }
+
+    bool contains(const std::string &name) const
+    {
+        for (auto it = st.rbegin(); it != st.rend(); ++it)
+        {
+            if (it->find(name) != it->end())
+                return true;
+        }
+        return false;
+    }
+
+    bool contains_current(const std::string &name) const
+    {
+        if (st.empty())
+            return false;
+        return st.back().find(name) != st.back().end();
+    }
 };
 
 #endif

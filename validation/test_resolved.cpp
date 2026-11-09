@@ -8,6 +8,7 @@
 #include "../src/ast/resolved/ast.hpp"
 #include "../src/ast/resolved/visitor.hpp"
 #include "../src/sema/sema.hpp"
+#include "../src/symbols/matrix.hpp"
 
 extern int yyparse(void);
 extern FILE *yyin;
@@ -21,6 +22,12 @@ public:
     {
         for (int i = 0; i < depth; ++i)
             std::cout << "  ";
+    }
+
+    void print_type(Type *t) const
+    {
+        if (t)
+            std::cout << " [type: " << t->name << "]";
     }
 
     void visit(ProgramNode *node) override
@@ -49,6 +56,8 @@ public:
             if (i > 0)
                 std::cout << ", ";
             std::cout << node->element_types[i].name;
+            if (node->element_types[i].resolved)
+                std::cout << " (resolved)";
         }
         std::cout << "]\n";
 
@@ -76,22 +85,17 @@ public:
                 std::cout << op.argument_types[i].name;
             }
             std::cout << "] -> ";
-            if (op.return_type.kind == ReturnTypeSpec::Kind::InferDefault)
-            {
+            if (op.return_type.type.resolved)
+                std::cout << op.return_type.type.resolved->name;
+            else if (op.return_type.kind == ReturnTypeSpec::Kind::InferDefault)
                 std::cout << "infer: default";
-            }
             else if (op.return_type.kind == ReturnTypeSpec::Kind::Infer)
-            {
                 std::cout << "infer: " << op.return_type.type.name;
-            }
             else
-            {
                 std::cout << op.return_type.type.name;
-            }
+
             if (op.definition)
-            {
                 std::cout << " (custom definition)";
-            }
             std::cout << "\n";
         }
         depth--;
@@ -134,7 +138,8 @@ public:
     void visit(VariableDeclarationNode *node) override
     {
         indent();
-        std::cout << "DECL (" << node->type.name << " " << node->name << ")\n";
+        std::cout << "DECL (" << (node->type.resolved ? node->type.resolved->name : node->type.name)
+                  << " " << node->name << ")\n";
         if (node->initializer)
         {
             depth++;
@@ -292,7 +297,15 @@ public:
     void visit(BinaryOperationNode *node) override
     {
         indent();
-        std::cout << "BINOP (" << node->operation << ")\n";
+        std::cout << "BINOP (" << node->operation;
+        if (node->resolved_operation)
+        {
+            std::cout << " [resolved: "
+                      << (node->resolved_operation->owner ? node->resolved_operation->owner->name + "::" : "")
+                      << node->resolved_operation->name << "]";
+        }
+        print_type(node->resolved_type);
+        std::cout << ")\n";
         depth++;
         if (node->lhs)
             node->lhs->accept(*this);
@@ -304,7 +317,9 @@ public:
     void visit(UnaryOperationNode *node) override
     {
         indent();
-        std::cout << "UNARY (" << node->operation << ")\n";
+        std::cout << "UNARY (" << node->operation;
+        print_type(node->resolved_type);
+        std::cout << ")\n";
         if (node->operand)
         {
             depth++;
@@ -316,7 +331,11 @@ public:
     void visit(FunctionCallNode *node) override
     {
         indent();
-        std::cout << "CALL (" << node->name << ")\n";
+        std::cout << "CALL (" << node->name;
+        if (node->resolved_function)
+            std::cout << " [fn: " << node->resolved_function->name << "]";
+        print_type(node->resolved_type);
+        std::cout << ")\n";
         depth++;
         for (const auto &arg : node->arguments)
         {
@@ -348,7 +367,9 @@ public:
     void visit(IndexNode *node) override
     {
         indent();
-        std::cout << "INDEX\n";
+        std::cout << "INDEX";
+        print_type(node->resolved_type);
+        std::cout << "\n";
         depth++;
         if (node->matrix)
             node->matrix->accept(*this);
@@ -374,7 +395,9 @@ public:
     void visit(MatrixLiteralNode *node) override
     {
         indent();
-        std::cout << "MATRIX_LIT\n";
+        std::cout << "MATRIX_LIT";
+        print_type(node->resolved_type);
+        std::cout << "\n";
         depth++;
         for (const auto &elem : node->elements)
         {
@@ -387,43 +410,59 @@ public:
     void visit(IdentifierNode *node) override
     {
         indent();
-        std::cout << "ID (" << node->name << ")\n";
+        std::cout << "ID (" << node->name;
+        if (node->resolved_symbol)
+            std::cout << " [sym: " << node->resolved_symbol->name << "]";
+        print_type(node->resolved_type);
+        std::cout << ")\n";
     }
 
     void visit(StreamNode *node) override
     {
         indent();
-        std::cout << "STREAM (" << node->name << ")\n";
+        std::cout << "STREAM (" << node->name;
+        print_type(node->resolved_type);
+        std::cout << ")\n";
     }
 
     void visit(IntegerLiteralNode *node) override
     {
         indent();
-        std::cout << "INT (" << node->value << ")\n";
+        std::cout << "INT (" << node->value;
+        print_type(node->resolved_type);
+        std::cout << ")\n";
     }
 
     void visit(UnsignedIntegerLiteralNode *node) override
     {
         indent();
-        std::cout << "UINT (" << node->value << ")\n";
+        std::cout << "UINT (" << node->value;
+        print_type(node->resolved_type);
+        std::cout << ")\n";
     }
 
     void visit(DoubleLiteralNode *node) override
     {
         indent();
-        std::cout << "DOUBLE (" << node->value << ")\n";
+        std::cout << "DOUBLE (" << node->value;
+        print_type(node->resolved_type);
+        std::cout << ")\n";
     }
 
     void visit(CharacterLiteralNode *node) override
     {
         indent();
-        std::cout << "CHAR ('" << node->value << "')\n";
+        std::cout << "CHAR ('" << node->value << "'";
+        print_type(node->resolved_type);
+        std::cout << ")\n";
     }
 
     void visit(StringLiteralNode *node) override
     {
         indent();
-        std::cout << "STRING (\"" << node->value << "\")\n";
+        std::cout << "STRING (\"" << node->value << "\"";
+        print_type(node->resolved_type);
+        std::cout << ")\n";
     }
 };
 
@@ -463,8 +502,37 @@ int main(int argc, char **argv)
     ResolvedASTPrinter printer;
     sem->tree->accept(printer);
 
+    std::cout << "\n--- SYMBOL TABLE (" << sem->st.size() << " symbols) ---\n";
+    for (size_t i = 0; i < sem->st.size(); ++i)
+    {
+        Symbol *s = sem->st.get(i);
+        if (!s)
+            continue;
+        std::cout << "  [" << i << "] " << s->name;
+        if (dynamic_cast<MatrixClass *>(s))
+        {
+            std::cout << " (MatrixClass)";
+        }
+        else if (auto *mop = dynamic_cast<MatrixOperation *>(s))
+        {
+            std::cout << " (MatrixOperation in " << (mop->owner ? mop->owner->name : "?") << ")";
+        }
+        else if (dynamic_cast<Function *>(s))
+        {
+            std::cout << " (Function)";
+        }
+        else if (dynamic_cast<Type *>(s))
+        {
+            std::cout << " (Type)";
+        }
+        else if (auto *v = dynamic_cast<Variable *>(s))
+        {
+            std::cout << " (Variable: " << (v->type ? v->type->name : "untyped") << ")";
+        }
+        std::cout << "\n";
+    }
+
     ast_free(ast_root);
     delete sem;
     return 0;
 }
-

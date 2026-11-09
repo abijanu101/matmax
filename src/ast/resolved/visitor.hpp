@@ -78,4 +78,33 @@ public:
     virtual void visit(StringLiteralNode *) = 0;
 };
 
+#define RESOLVED_AST_VISIT_METHODS                              \
+    void visit(ProgramNode *) override;                         \
+    void visit(MatrixClassDeclarationNode *) override;          \
+    void visit(MatrixOperationDeclarationNode *) override;      \
+    void visit(VariableDeclarationNode *) override;             \
+    void visit(FunctionDefinitionNode *) override;              \
+    void visit(BlockNode *) override;                           \
+    void visit(AssignmentNode *) override;                      \
+    void visit(MatrixInitializationNode *) override;            \
+    void visit(MatrixApplicationNode *) override;               \
+    void visit(WriteNode *) override;                           \
+    void visit(IfNode *) override;                              \
+    void visit(ForNode *) override;                             \
+    void visit(ReturnNode *) override;                          \
+    void visit(BinaryOperationNode *) override;                 \
+    void visit(UnaryOperationNode *) override;                  \
+    void visit(FunctionCallNode *) override;                    \
+    void visit(RegionNode *) override;                          \
+    void visit(IndexNode *) override;                           \
+    void visit(RangeNode *) override;                           \
+    void visit(MatrixLiteralNode *) override;                   \
+    void visit(IdentifierNode *) override;                      \
+    void visit(StreamNode *) override;                          \
+    void visit(IntegerLiteralNode *) override;                  \
+    void visit(UnsignedIntegerLiteralNode *) override;          \
+    void visit(DoubleLiteralNode *) override;                   \
+    void visit(CharacterLiteralNode *) override;                \
+    void visit(StringLiteralNode *) override;
+
 #endif

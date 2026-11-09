@@ -5,32 +5,32 @@
 
 SemanticResult *analyze(ParserASTNode *tree)
 {
-    SemanticResult* res = new SemanticResult();
+    SemanticResult *res = new SemanticResult();
 
+    // Pass 1: Normalization
     NormalizingVisitor v1;
     dispatch(tree, v1);
     res->tree = v1.get_result().release();
-        // convert commute to flipped repetition e.g., subop "int + float >> float: commute default" becomes
-            // int + float >> float: default
-            // float + int >> float: default
-        // eliminate keywords "all" and "default"
-        // reconstruct tree with new node structure
-        // also replace builtins with generic function nodes, definitions to be hardcoded into the compiler in a separate.hpp
-        // no work with the symbol tree
 
-    // DeclarationScanningVisitor v2;
-    //     // simply add each variable, matrixclass, function, and matrixoperation declaration to the symbol table
+    if (!res->tree)
+        return res;
 
-    // SemanticEnvironment e;
-    // NameResolutionVisitor v3;
-    //     // use a stack of hashes to handle shadowing, scoping, etc.
-    //     // cant resolve operations yet because implicit signature matching
+    // Pass 2: Declaration scanning
+    DeclarationScanningVisitor v2(res->st);
+    res->tree->accept(v2);
 
-    // TypeAnalysisVisitor v4;
-    //     // kill the datattype 'infer' and replace with inferred type, also check for type errors and annotate with type information
+    // Pass 3: Name resolution
+    SemanticEnvironment e;
+    NameResolutionVisitor v3(res->st, e);
+    res->tree->accept(v3);
 
-    // OperationResolutionVisitor v5;
-    //     // annotate each operation on a Matrix with reference to relevant definition as persisted into the syntax table during the desugaring pass
-    //     // same SemanticEnvironment technique
+    // Pass 4: Type analysis
+    TypeAnalysisVisitor v4(res->st);
+    res->tree->accept(v4);
+
+    // Pass 5: Operation resolution
+    OperationResolutionVisitor v5(res->st, e);
+    res->tree->accept(v5);
+
     return res;
 }
