@@ -1,17 +1,24 @@
 #include <vector>
+#include <cassert>
+#include "primitives.hpp"
 #include "symbol.hpp"
 
 class SymbolTable
 {
 private:
-    std::vector<Symbol> st;
+    std::vector<Symbol *> st;
+
 public:
-    void push(Symbol& sym)
+    SymbolTable()
     {
-
+        for (Type &i : primitive_types)
+            st.push_back(&i);
     }
-    void get(int idx)
-    {
 
+    void push(Symbol *sym) { st.push_back(sym); }
+    Symbol* get(int idx)
+    {
+        assert(idx < st.size());
+        return st[idx];
     }
 };

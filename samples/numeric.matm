@@ -1,6 +1,6 @@
 matrix NumericMatrix {
     types: [uint, int, double, char]
-    ops: [+, *, inv]
+    ops: [+, *]
     subops: [
         all + all >> infer: default;
         all * all >> infer: default;

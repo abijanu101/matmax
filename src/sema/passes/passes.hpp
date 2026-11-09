@@ -1,33 +1,34 @@
 #include "../../ast/parser/visitor.hpp"
 #include "../../ast/resolved/visitor.hpp"
 
-class DeclarationScanningVisitor : public ParserASTVisitor
+class NormalizingVisitor : public ParserASTVisitor
 {
 public:
     PARSER_AST_VISIT_METHODS
 };
 
-class NameResolutionVisitor : public ParserASTVisitor
+// -- second tree --
+
+class DeclarationScanningVisitor : public ResolvedASTVisitor
 {
 public:
-    PARSER_AST_VISIT_METHODS
+
 };
 
-class TypeAnalysisVisitor : public ParserASTVisitor
+
+class NameResolutionVisitor : public ResolvedASTVisitor
 {
 public:
-    PARSER_AST_VISIT_METHODS
+
 };
 
-class InferenceResolutionVisitor : public ParserASTVisitor
+class TypeAnalysisVisitor : public ResolvedASTVisitor
 {
 public:
-    PARSER_AST_VISIT_METHODS
 };
 
-// new tree structure, new abstract visitor !!!
-
-class MemoryLayoutVisitor : public ResolvedASTVisitor
+class OperationResolutionVisitor : public ResolvedASTVisitor
 {
 public:
+
 };

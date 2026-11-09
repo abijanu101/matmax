@@ -4,23 +4,27 @@
 
 SemanticResult *analyze(ParserASTNode *tree)
 {
-    SemanticEnvironment e;
     SemanticResult* res = new SemanticResult();
 
-    DeclarationScanningVisitor v1;
-    // visit code here
+    NormalizingVisitor v1;
+        // eliminate keywords "all" and "default"
+        // reconstruct tree with new node structure
+        // also replace builtins with generic function nodes, definitions to be hardcoded into the compiler in a separate.hpp
+        // no work with the symbol tree
 
-    NameResolutionVisitor v2;
-    // visit code here
+    DeclarationScanningVisitor v2;
+        // simply add each variable, matrixclass, function, and matrixoperation declaration to the symbol table
 
-    TypeAnalysisVisitor v3;
-    // visit code here
-    
-    InferenceResolutionVisitor v4;
-    // visit code here, produces new tree 
+    SemanticEnvironment e;
+    NameResolutionVisitor v3;
+        // use a stack of hashes to handle shadowing, scoping, etc.
+        // cant resolve operations yet because implicit signature matching
 
-    MemoryLayoutVisitor v5;
-    // visits newly created tree (res->tree)
+    TypeAnalysisVisitor v4;
+        // kill the datattype 'infer' and replace with inferred type, also check for type errors and annotate with type information
 
+    OperationResolutionVisitor v5;
+        // annotate each operation on a Matrix with reference to relevant definition as persisted into the syntax table during the desugaring pass
+        // same SemanticEnvironment technique
     return res;
 }

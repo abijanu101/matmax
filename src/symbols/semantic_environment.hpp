@@ -6,6 +6,7 @@
 #include <string>
 #include "../sema/errors.hpp"
 
+// remember to push primitives in from the outside asw !!
 class SemanticEnvironment
 {
 private:
@@ -13,6 +14,7 @@ private:
 
 public:
     SemanticEnvironment() { push_frame(); }
+
     void push_frame() { st.push_back(std::unordered_map<std::string, unsigned int>()); }
     void pop_frame(int line = -1)
     {
