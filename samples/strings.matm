@@ -2,9 +2,9 @@ matrix StringMatrix {
     types: [char, string]
     ops: [+]
     subops: [
-        string + string >> infer: string;
-        char + string >> infer: string;
-        string + char >> infer: string;
+        string + string >> infer: default;
+        char + string >> infer: default;
+        string + char >> infer: default;
     ]
 };
 
