@@ -129,28 +129,29 @@ void DeclarationScanningVisitor::visit(MatrixClassDeclarationNode *node)
         if (!rules::is_binary_operator(op) && op != "tran" && !mc->get_operations(op))
             throw TypeError("'" + op + "' in the ops list of '" + node->name +
                                 "' is not an operator or a custom operation of this matrix.",
-                            line);
+                            node->ops_line ? node->ops_line : line);
     }
 
     // 4. Element-wise rules (subops).
     for (auto &spec : node->elementwise_operations)
     {
+        const int sline = spec.line ? spec.line : line;
         if (!mc->permits(spec.operation))
             throw TypeError("Matrix '" + node->name + "' has a subop for '" +
                                 spec.operation + "', but '" + spec.operation +
                                 "' is not in its ops list.",
-                            line);
+                            sline);
 
         std::vector<Type *> args;
         for (auto &ref : spec.argument_types)
-            args.push_back(require_type(st, ref, line));
+            args.push_back(require_type(st, ref, sline));
 
         for (Type *t : args)
             if (!contains(elements, t))
                 throw TypeError("Subop '" + signature(spec.operation, args) + "' uses '" +
                                     t->name + "', which is not an element type of '" +
                                     node->name + "'.",
-                                line);
+                                sline);
 
         Type *ret = nullptr;
         if (spec.return_type.kind == ReturnTypeSpec::Kind::InferDefault)
@@ -161,17 +162,17 @@ void DeclarationScanningVisitor::visit(MatrixClassDeclarationNode *node)
                 throw TypeError("Cannot infer the result of '" +
                                     signature(spec.operation, args) + "' in '" +
                                     node->name + "'. Write the result type instead of default.",
-                                line);
+                                sline);
             spec.return_type.type.name = ret->name;
             spec.return_type.type.resolved = ret;
         }
         else
-            ret = require_type(st, spec.return_type.type, line);
+            ret = require_type(st, spec.return_type.type, sline);
 
         if (spec.definition && spec.definition->parameters.size() != 2)
             throw TypeError("The function for subop '" + signature(spec.operation, args) +
                                 "' must have exactly 2 parameters.",
-                            line);
+                            sline);
 
         // Parameter i of this signature is implementation parameter order[i]
         // (the order is {0,1}, or {1,0} for a commuted copy).

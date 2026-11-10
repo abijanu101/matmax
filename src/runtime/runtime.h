@@ -12,7 +12,11 @@
  * Values are never changed after they are made, except matrices, which
  * `init`, `apply` and `A[i, j] = x` change in place. Storing a matrix in
  * a variable copies it, so two variables never share one matrix.
- * Memory is not freed: a MatMax program is short-lived.
+ *
+ * Memory is freed by a small mark-and-sweep garbage collector. Top-level
+ * variables are registered as roots (mm_gc_root), and the program calls
+ * mm_gc_safepoint() between top-level statements. At those points no
+ * function is running, so every live value is reachable from a root.
  */
 
 #include <stdint.h>
@@ -99,6 +103,10 @@ struct MValue
         FILE *f;
         Matrix *m;
     } as;
+
+    /* garbage collector bookkeeping */
+    MValue *gc_next;
+    int gc_mark;
 };
 
 /* ---- values ---- */
@@ -156,6 +164,10 @@ MValue *mm_normalize(MValue *m);
 
 /* ---- output ---- */
 void mm_write(MValue *file, MValue *v);
+
+/* ---- garbage collection ---- */
+void mm_gc_root(MValue **slot);
+void mm_gc_safepoint(void);
 
 #ifdef __cplusplus
 }

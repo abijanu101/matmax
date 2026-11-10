@@ -107,6 +107,23 @@ MValue *&Interpreter::slot(Variable *v, int line)
     throw InterpreterError("variable '" + v->name + "' has no value", line);
 }
 
+// A new variable in the current frame. Top-level ones are GC roots.
+MValue *&Interpreter::define(Variable *v)
+{
+    auto inserted = frames.back().try_emplace(v, nullptr);
+    if (inserted.second && frames.size() == 1)
+        mm_gc_root(&inserted.first->second);
+    return inserted.first->second;
+}
+
+// Between top-level statements no function is running, so every live
+// value is in a frame-0 variable and the runtime may collect garbage.
+void Interpreter::safepoint()
+{
+    if (frames.size() == 1)
+        mm_gc_safepoint();
+}
+
 // Stores a value, converted to the variable's declared type
 // (and copied if it is a matrix). Declares the variable if it is new.
 void Interpreter::store(Variable *v, MValue *value)
@@ -121,7 +138,7 @@ void Interpreter::store(Variable *v, MValue *value)
             return;
         }
     }
-    frames.back()[v] = converted;
+    define(v) = converted;
 }
 
 Interpreter::Callback *Interpreter::callback_for(FunctionDefinitionNode *def)
@@ -220,6 +237,7 @@ void Interpreter::run(ProgramNode *program)
         go(item.get());
         if (auto *vd = dynamic_cast<VariableDeclarationNode *>(item.get()))
             top_level[vd->name] = vd->symbol;
+        safepoint();
     }
 }
 
@@ -238,6 +256,7 @@ void Interpreter::visit(BlockNode *node)
         go(stmt.get());
         if (returning)
             return; // a `ret` skips the rest of the function
+        safepoint();
     }
 }
 
@@ -263,7 +282,7 @@ void Interpreter::visit(VariableDeclarationNode *node)
         value = mm_zero(runtime_type(type));
 
     // A declaration always makes a new variable in the current frame.
-    frames.back()[node->symbol] = mm_assign(value, runtime_type(type));
+    define(node->symbol) = mm_assign(value, runtime_type(type));
 }
 
 void Interpreter::visit(AssignmentNode *node)
@@ -322,7 +341,7 @@ void Interpreter::visit(ForNode *node)
     int64_t n = mm_count(eval(node->range.get()));
     for (int64_t i = 0; i < n && !returning; ++i)
     {
-        frames.back()[node->variable_symbol] =
+        define(node->variable_symbol) =
             mm_assign(mm_uint(i), runtime_type(node->variable_symbol->type));
         go(node->body.get());
     }

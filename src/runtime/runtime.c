@@ -28,10 +28,19 @@ static void *alloc(size_t size)
     return p;
 }
 
+/* Every value is on this list, so the collector can find unused ones. */
+static MValue *all_values = NULL;
+static int64_t values_alive = 0;
+static int64_t made_since_collect = 0;
+
 static MValue *box(Tag tag)
 {
     MValue *v = alloc(sizeof(MValue));
     v->tag = tag;
+    v->gc_next = all_values;
+    all_values = v;
+    values_alive++;
+    made_since_collect++;
     return v;
 }
 
@@ -956,4 +965,73 @@ void mm_write(MValue *file, MValue *v)
         fail("'write' needs a file");
     print_value(file->as.f, need(v), 0);
     fputc('\n', file->as.f);
+}
+
+/* ============================================================
+ * Garbage collection (mark and sweep)
+ * ============================================================ */
+
+static MValue ***roots = NULL;
+static int64_t n_roots = 0;
+static int64_t live_after_collect = 0; /* values that survived the last collection */
+
+void mm_gc_root(MValue **slot)
+{
+    roots = realloc(roots, sizeof(MValue **) * (size_t)(n_roots + 1));
+    roots[n_roots++] = slot;
+}
+
+static void mark(MValue *v)
+{
+    if (!v || v->gc_mark)
+        return;
+    v->gc_mark = 1;
+    if (v->tag == T_MATRIX)
+        for (int64_t k = 0; k < v->as.m->rows * v->as.m->cols; ++k)
+            mark(v->as.m->cells[k]);
+}
+
+static void release(MValue *v)
+{
+    if (v->tag == T_STRING)
+        free(v->as.s);
+    else if (v->tag == T_MATRIX)
+    {
+        free(v->as.m->cells);
+        free(v->as.m);
+    }
+    free(v);
+}
+
+/* Called between top-level statements. Collects once the program has made
+ * at least 100,000 new values, and at least as many as survived last time
+ * (so a program with many live values is not collected over and over). */
+void mm_gc_safepoint(void)
+{
+#ifndef MM_GC_STRESS /* testing: -DMM_GC_STRESS collects at every safepoint */
+    if (made_since_collect < 100000 || made_since_collect < live_after_collect)
+        return;
+#endif
+
+    for (int64_t i = 0; i < n_roots; ++i)
+        mark(*roots[i]);
+
+    MValue **link = &all_values;
+    while (*link)
+    {
+        MValue *v = *link;
+        if (v->gc_mark)
+        {
+            v->gc_mark = 0;
+            link = &v->gc_next;
+        }
+        else
+        {
+            *link = v->gc_next;
+            release(v);
+            values_alive--;
+        }
+    }
+    made_since_collect = 0;
+    live_after_collect = values_alive;
 }

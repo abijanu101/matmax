@@ -20,7 +20,7 @@ declare ptr @mm_neg(ptr)
 declare i32 @mm_truthy(ptr)
 declare i64 @mm_count(ptr)
 declare void @mm_init(ptr, i32, ptr)
-declare void @mm_apply(ptr, i32, ptr)
+declare void @mm_apply_ctx(ptr, i32, ptr, ptr)
 declare ptr @mm_index(ptr, ptr, ptr, ptr, ptr, i32)
 declare void @mm_set_index(ptr, ptr, ptr, ptr, ptr, i32, ptr)
 declare ptr @mm_row_new(i64)
@@ -37,6 +37,8 @@ declare ptr @mm_hstack(ptr, ptr)
 declare ptr @mm_zeros(ptr, ptr)
 declare ptr @mm_normalize(ptr)
 declare void @mm_write(ptr, ptr)
+declare void @mm_gc_root(ptr)
+declare void @mm_gc_safepoint()
 
 @cls.0 = internal global ptr null
 @cls.1 = internal global ptr null
@@ -241,5 +243,7 @@ entry:
   %cls.83 = load ptr, ptr @cls.0
   %cls.84 = load ptr, ptr @cls.0
   call void @mm_class_subop(ptr %t.74, i32 2, ptr %cls.82, ptr %cls.83, ptr %cls.84, ptr null, i32 0)
+  call void @mm_gc_safepoint()
+  call void @mm_gc_safepoint()
   ret i32 0
 }

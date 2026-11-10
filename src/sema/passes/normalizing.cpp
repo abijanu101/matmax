@@ -285,9 +285,11 @@ namespace
         const ReturnTypeSpec &return_type,
         const std::shared_ptr<FunctionDefinitionNode> &definition,
         int specificity,
-        bool commute)
+        bool commute,
+        int line)
     {
         ElementwiseOperationSpec original;
+        original.line = line;
 
         original.operation = operation_name;
         original.argument_types = argument_types;
@@ -311,6 +313,7 @@ namespace
         }
 
         ElementwiseOperationSpec reversed;
+        reversed.line = line;
 
         reversed.operation = operation_name;
         reversed.argument_types = {
@@ -382,7 +385,8 @@ namespace
                     return_type,
                     definition,
                     specificity,
-                    commute);
+                    commute,
+                    left->line); // the subop's first line
             }
         }
     }
@@ -413,7 +417,8 @@ namespace
                     ReturnTypeSpec::infer_default(),
                     nullptr,
                     0,
-                    false);
+                    false,
+                    matrix.line);
             }
         }
     }
@@ -443,7 +448,9 @@ namespace
             std::make_unique<MatrixOperationDeclarationNode>();
 
         operation->name = node_text(node);
-        operation->line = node->line;
+        // The CUSTOM node is created after its body; its first argument
+        // type is on the line where the operation starts.
+        operation->line = arg_types->nchildren ? child(arg_types, 0)->line : node->line;
         operation->kind = OperationKind::Custom;
         operation->owner = owner;
         operation->return_type = normalize_return_type(return_node);
@@ -612,6 +619,8 @@ void NormalizingVisitor::visit_matrix_def(ParserASTNode *node)
     // Permitted matrix-level operators.
     if (operators->kind != N_OP_LIST)
         throw std::runtime_error("Expected OP_LIST.");
+
+    matrix->ops_line = operators->line;
 
     for (int i = 0; i < operators->nchildren; ++i)
     {

@@ -121,6 +121,9 @@ struct ElementwiseOperationSpec
     // originally declared as (int, float) by reversing its arguments.
     std::vector<std::size_t> implementation_argument_order;
 
+    // Source line of this subop (for error messages).
+    int line = 0;
+
     // Set by DeclarationScanningVisitor.
     MatrixOperation *symbol = nullptr;
 };
@@ -368,6 +371,9 @@ public:
     // CUSTOM_LIST: custom matrix-level operations.
     std::vector<std::unique_ptr<MatrixOperationDeclarationNode>>
         matrix_operations;
+
+    // Source line of the `ops:` list (for error messages).
+    int ops_line = 0;
 
     // Set by DeclarationScanningVisitor.
     MatrixClass *symbol = nullptr;

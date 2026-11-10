@@ -1,6 +1,7 @@
 #ifndef INTERPRETER_HPP
 #define INTERPRETER_HPP
 
+#include <deque>
 #include <map>
 #include <memory>
 #include <stdexcept>
@@ -79,8 +80,9 @@ private:
 
     // frames[0] holds top-level variables; each function call pushes one.
     // A name is looked up from the newest frame down, so an `apply` body
-    // can also read the variables of the code around it.
-    std::vector<std::unordered_map<const Variable *, MValue *>> frames;
+    // can also read the variables of the code around it. A deque, so the
+    // addresses of frame-0 variables (GC roots) never move.
+    std::deque<std::unordered_map<const Variable *, MValue *>> frames;
 
     std::map<const MatrixClass *, MType *> classes;
     std::map<std::string, Variable *> top_level; // for ROWS and COLS
@@ -93,6 +95,8 @@ private:
     MValue *eval(ExpressionNode *e);
     MType *runtime_type(Type *t);
     MValue *&slot(Variable *v, int line);
+    MValue *&define(Variable *v);
+    void safepoint();
     void store(Variable *v, MValue *value);
     Callback *callback_for(FunctionDefinitionNode *def);
     void register_class(MatrixClassDeclarationNode *node);

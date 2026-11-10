@@ -1,5 +1,9 @@
 CXX = g++
 CXXFLAGS = -Wall -Isrc -Isrc/ast/parser -Isrc/ast/resolved -Isrc/sema -Isrc/sema/passes
+# -MMD -MP: record which headers each .o uses (build/*.d), so changing a
+# header rebuilds the files that include it.
+DEPFLAGS = -MMD -MP
+CXXFLAGS += $(DEPFLAGS)
 
 .PHONY: all frontend semantic tests clean
 
@@ -43,7 +47,7 @@ semantic: build/libsema.a
 build/codegen.o: src/codegen/codegen.cpp src/codegen/codegen.hpp
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 build/runtime.o: src/runtime/runtime.c src/runtime/runtime.h
-	gcc -std=c11 -O2 -Wall -c $< -o $@
+	gcc -std=c11 -O2 -Wall $(DEPFLAGS) -c $< -o $@
 build/matmaxc.o: src/matmaxc.cpp
 	$(CXX) $(CXXFLAGS) -DMATMAX_RUNTIME='"$(CURDIR)/build/runtime.o"' -c $< -o $@
 
@@ -74,3 +78,5 @@ build/test_resolved.out: build/test_resolved.o frontend semantic
 
 clean:
 	rm -f build/*
+
+-include $(wildcard build/*.d)

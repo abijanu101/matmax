@@ -20,7 +20,7 @@ declare ptr @mm_neg(ptr)
 declare i32 @mm_truthy(ptr)
 declare i64 @mm_count(ptr)
 declare void @mm_init(ptr, i32, ptr)
-declare void @mm_apply(ptr, i32, ptr)
+declare void @mm_apply_ctx(ptr, i32, ptr, ptr)
 declare ptr @mm_index(ptr, ptr, ptr, ptr, ptr, i32)
 declare void @mm_set_index(ptr, ptr, ptr, ptr, ptr, i32, ptr)
 declare ptr @mm_row_new(i64)
@@ -37,6 +37,8 @@ declare ptr @mm_hstack(ptr, ptr)
 declare ptr @mm_zeros(ptr, ptr)
 declare ptr @mm_normalize(ptr)
 declare void @mm_write(ptr, ptr)
+declare void @mm_gc_root(ptr)
+declare void @mm_gc_safepoint()
 
 @cls.0 = internal global ptr null
 @str.1 = private unnamed_addr constant [12 x i8] c"MixedMatrix\00"
@@ -121,7 +123,7 @@ after.ret.79:
   ret ptr null
 }
 
-define internal ptr @fn.118(ptr %arg0) {
+define internal ptr @fn.118(ptr %ctx, ptr %arg0) {
 entry:
   %v.119 = alloca ptr
   store ptr null, ptr %v.119
@@ -149,6 +151,12 @@ after.ret.134:
 
 define i32 @main() {
 entry:
+  call void @mm_gc_root(ptr @g.84)
+  call void @mm_gc_root(ptr @g.88)
+  call void @mm_gc_root(ptr @g.95)
+  call void @mm_gc_root(ptr @g.102)
+  call void @mm_gc_root(ptr @g.109)
+  call void @mm_gc_root(ptr @g.137)
   %t.2 = call ptr @mm_class_new(ptr @str.1)
   store ptr %t.2, ptr @cls.0
   %t.3 = call ptr @mm_prim(i32 2)
@@ -201,14 +209,17 @@ entry:
   %t.81 = call ptr @mm_prim(i32 5)
   %t.82 = call ptr @mm_prim(i32 5)
   call void @mm_class_subop(ptr %t.2, i32 2, ptr %t.80, ptr %t.81, ptr %t.82, ptr @fn.69, i32 0)
+  call void @mm_gc_safepoint()
   %t.83 = call ptr @mm_uint(i64 3)
   %t.85 = call ptr @mm_prim(i32 2)
   %t.86 = call ptr @mm_assign(ptr %t.83, ptr %t.85)
   store ptr %t.86, ptr @g.84
+  call void @mm_gc_safepoint()
   %t.87 = call ptr @mm_uint(i64 3)
   %t.89 = call ptr @mm_prim(i32 2)
   %t.90 = call ptr @mm_assign(ptr %t.87, ptr %t.89)
   store ptr %t.90, ptr @g.88
+  call void @mm_gc_safepoint()
   %t.91 = load ptr, ptr @g.88
   %t.92 = load ptr, ptr @g.84
   %cls.93 = load ptr, ptr @cls.0
@@ -216,6 +227,7 @@ entry:
   %cls.96 = load ptr, ptr @cls.0
   %t.97 = call ptr @mm_assign(ptr %t.94, ptr %cls.96)
   store ptr %t.97, ptr @g.95
+  call void @mm_gc_safepoint()
   %t.98 = load ptr, ptr @g.88
   %t.99 = load ptr, ptr @g.84
   %cls.100 = load ptr, ptr @cls.0
@@ -223,6 +235,7 @@ entry:
   %cls.103 = load ptr, ptr @cls.0
   %t.104 = call ptr @mm_assign(ptr %t.101, ptr %cls.103)
   store ptr %t.104, ptr @g.102
+  call void @mm_gc_safepoint()
   %t.105 = load ptr, ptr @g.88
   %t.106 = load ptr, ptr @g.84
   %cls.107 = load ptr, ptr @cls.0
@@ -230,41 +243,52 @@ entry:
   %cls.110 = load ptr, ptr @cls.0
   %t.111 = call ptr @mm_assign(ptr %t.108, ptr %cls.110)
   store ptr %t.111, ptr @g.109
+  call void @mm_gc_safepoint()
   %t.112 = load ptr, ptr @g.95
   call void @mm_init(ptr %t.112, i32 1, ptr null)
+  call void @mm_gc_safepoint()
   %t.113 = load ptr, ptr @g.102
   %t.114 = call ptr @mm_double(double 0x4000000000000000)
   call void @mm_init(ptr %t.113, i32 0, ptr %t.114)
+  call void @mm_gc_safepoint()
   %t.115 = load ptr, ptr @g.109
   %t.117 = call ptr @mm_string(ptr @str.116)
   call void @mm_init(ptr %t.115, i32 0, ptr %t.117)
+  call void @mm_gc_safepoint()
   %t.135 = load ptr, ptr @g.95
-  call void @mm_apply(ptr %t.135, i32 0, ptr @fn.118)
+  call void @mm_apply_ctx(ptr %t.135, i32 0, ptr @fn.118, ptr null)
+  call void @mm_gc_safepoint()
   %t.136 = call ptr @mm_stdout()
   %t.138 = call ptr @mm_prim(i32 6)
   %t.139 = call ptr @mm_assign(ptr %t.136, ptr %t.138)
   store ptr %t.139, ptr @g.137
+  call void @mm_gc_safepoint()
   %t.140 = load ptr, ptr @g.137
   %t.141 = load ptr, ptr @g.95
   call void @mm_write(ptr %t.140, ptr %t.141)
+  call void @mm_gc_safepoint()
   %t.142 = load ptr, ptr @g.137
   %t.143 = load ptr, ptr @g.95
   %t.144 = load ptr, ptr @g.109
   %t.145 = call ptr @mm_binop(i32 2, ptr %t.143, ptr %t.144)
   call void @mm_write(ptr %t.142, ptr %t.145)
+  call void @mm_gc_safepoint()
   %t.146 = load ptr, ptr @g.137
   %t.147 = load ptr, ptr @g.102
   %t.148 = load ptr, ptr @g.102
   %t.149 = call ptr @mm_binop(i32 0, ptr %t.147, ptr %t.148)
   call void @mm_write(ptr %t.146, ptr %t.149)
+  call void @mm_gc_safepoint()
   %t.150 = load ptr, ptr @g.137
   %t.151 = load ptr, ptr @g.95
   %t.152 = load ptr, ptr @g.109
   %t.153 = call ptr @mm_vstack(ptr %t.151, ptr %t.152)
   call void @mm_write(ptr %t.150, ptr %t.153)
+  call void @mm_gc_safepoint()
   %t.154 = load ptr, ptr @g.137
   %t.155 = load ptr, ptr @g.109
   %t.156 = call ptr @mm_sum(ptr %t.155, i32 0)
   call void @mm_write(ptr %t.154, ptr %t.156)
+  call void @mm_gc_safepoint()
   ret i32 0
 }

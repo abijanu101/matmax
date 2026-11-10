@@ -29,7 +29,7 @@ declare ptr @mm_neg(ptr)
 declare i32 @mm_truthy(ptr)
 declare i64 @mm_count(ptr)
 declare void @mm_init(ptr, i32, ptr)
-declare void @mm_apply(ptr, i32, ptr)
+declare void @mm_apply_ctx(ptr, i32, ptr, ptr)
 declare ptr @mm_index(ptr, ptr, ptr, ptr, ptr, i32)
 declare void @mm_set_index(ptr, ptr, ptr, ptr, ptr, i32, ptr)
 declare ptr @mm_row_new(i64)
@@ -46,6 +46,8 @@ declare ptr @mm_hstack(ptr, ptr)
 declare ptr @mm_zeros(ptr, ptr)
 declare ptr @mm_normalize(ptr)
 declare void @mm_write(ptr, ptr)
+declare void @mm_gc_root(ptr)
+declare void @mm_gc_safepoint()
 )";
 
 namespace
@@ -192,8 +194,10 @@ std::string CodeGenerator::new_slot(Variable *v)
     Slot slot;
     if (fn->is_main)
     {
+        // A global, registered with the garbage collector as a root.
         slot.name = "@" + fresh("g");
         globals << slot.name << " = internal global ptr null\n";
+        fn->allocas << "  call void @mm_gc_root(ptr " << slot.name << ")\n";
     }
     else
     {
@@ -212,13 +216,25 @@ std::string CodeGenerator::slot_for(Variable *v, int line)
     if (found == slots.end())
         throw CodegenError("variable '" + v->name + "' has no storage", line);
 
-    // An `apply` inside a function body would need the function's local
-    // variables, which live in another LLVM function's stack frame.
-    if (found->second.owner && found->second.owner != fn)
-        throw CodegenError("an 'apply' inside a function cannot use the function's variable '" +
-                               v->name + "' yet",
-                           line);
-    return found->second.name;
+    const Slot &slot = found->second;
+    if (!slot.owner || slot.owner == fn)
+        return slot.name; // a global, or one of this function's allocas
+
+    // A variable of the function around this `apply` body: its address is
+    // entry k of the %ctx array the caller passes in.
+    if (!fn->parent)
+        throw CodegenError("variable '" + v->name + "' is not visible here", line);
+
+    size_t k = 0;
+    while (k < fn->captures.size() && fn->captures[k] != v)
+        ++k;
+    if (k == fn->captures.size())
+        fn->captures.push_back(v);
+
+    std::string entry = "%" + fresh("cap"), address = "%" + fresh("cap");
+    emit(entry + " = getelementptr ptr, ptr %ctx, i64 " + std::to_string(k));
+    emit(address + " = load ptr, ptr " + entry);
+    return address;
 }
 
 // Stores a value, converted to the variable's declared type
@@ -230,8 +246,9 @@ void CodeGenerator::store(Variable *v, const std::string &val, int line)
     emit("store ptr " + converted + ", ptr " + slot_for(v, line));
 }
 
-// The LLVM function for a MatMax function body, written the first time it is needed.
-std::string CodeGenerator::function_for(FunctionDefinitionNode *def)
+// The LLVM function for a MatMax function body, written the first time it
+// is needed. `parent` is set for `apply` bodies (see slot_for).
+std::string CodeGenerator::function_for(FunctionDefinitionNode *def, Function *parent)
 {
     auto found = function_names.find(def);
     if (found != function_names.end())
@@ -243,13 +260,14 @@ std::string CodeGenerator::function_for(FunctionDefinitionNode *def)
     Function *saved_fn = fn;
     std::string saved_last = last;
     Function f;
+    f.parent = parent;
     fn = &f;
 
-    std::string params;
+    std::string params = parent ? "ptr %ctx" : "";
     for (size_t i = 0; i < def->parameter_symbols.size(); ++i)
     {
         std::string arg = "%arg" + std::to_string(i);
-        params += (i ? ", ptr " : "ptr ") + arg;
+        params += (params.empty() ? "ptr " : ", ptr ") + arg;
         new_slot(def->parameter_symbols[i]);
         store(def->parameter_symbols[i], arg, def->line);
     }
@@ -259,6 +277,7 @@ std::string CodeGenerator::function_for(FunctionDefinitionNode *def)
 
     functions << "define internal ptr " << name << "(" << params << ") {\nentry:\n"
               << f.allocas.str() << f.body.str() << "}\n\n";
+    function_captures[def] = f.captures;
 
     fn = saved_fn;
     last = saved_last;
@@ -338,12 +357,13 @@ std::string CodeGenerator::generate(ProgramNode *program)
         if (auto *cd = dynamic_cast<MatrixClassDeclarationNode *>(item.get()))
             register_class(cd);
 
-    // 3. The statements, in order.
+    // 3. The statements, in order, each followed by a GC safepoint.
     for (auto &item : program->items)
     {
         go(item.get());
         if (auto *vd = dynamic_cast<VariableDeclarationNode *>(item.get()))
             top_level[vd->name] = vd->symbol;
+        call_void("mm_gc_safepoint", "");
     }
 
     std::ostringstream module;
@@ -361,6 +381,18 @@ std::string CodeGenerator::generate(ProgramNode *program)
 // function bodies are written by function_for, so neither is visited here.
 void CodeGenerator::visit(MatrixClassDeclarationNode *) {}
 void CodeGenerator::visit(FunctionDefinitionNode *) {}
+
+// In @main, every statement is followed by a GC safepoint: there, no
+// function is running and every live value is in a (global) variable.
+void CodeGenerator::visit(BlockNode *node)
+{
+    for (auto &stmt : node->statements)
+    {
+        go(stmt.get());
+        if (fn->is_main)
+            call_void("mm_gc_safepoint", "");
+    }
+}
 
 // ============================================================
 // Statements
@@ -434,11 +466,30 @@ void CodeGenerator::visit(MatrixInitializationNode *node)
 
 void CodeGenerator::visit(MatrixApplicationNode *node)
 {
-    std::string f = function_for(node->function.get());
+    std::string f = function_for(node->function.get(), fn);
+
+    // The closure: an array with the address of every outside variable
+    // the body uses (none at the top level, where variables are globals).
+    const auto &captures = function_captures.at(node->function.get());
+    std::string ctx = "null";
+    if (!captures.empty())
+    {
+        std::string n = std::to_string(captures.size());
+        ctx = "%" + fresh("ctx");
+        fn->allocas << "  " << ctx << " = alloca [" << n << " x ptr]\n";
+        for (size_t k = 0; k < captures.size(); ++k)
+        {
+            std::string entry = "%" + fresh("t");
+            emit(entry + " = getelementptr [" + n + " x ptr], ptr " + ctx + ", i64 0, i64 " +
+                 std::to_string(k));
+            emit("store ptr " + slot_for(captures[k], node->line) + ", ptr " + entry);
+        }
+    }
+
     std::string m = "%" + fresh("t");
     emit(m + " = load ptr, ptr " + slot_for(node->matrix_symbol, node->line));
-    call_void("mm_apply", "ptr " + m + ", i32 " + std::to_string(region_code(node->region)) +
-                              ", ptr " + f);
+    call_void("mm_apply_ctx", "ptr " + m + ", i32 " + std::to_string(region_code(node->region)) +
+                                  ", ptr " + f + ", ptr " + ctx);
 }
 
 void CodeGenerator::visit(WriteNode *node)
