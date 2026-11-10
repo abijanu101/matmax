@@ -3,7 +3,7 @@ CXXFLAGS = -Wall -Isrc -Isrc/ast/parser -Isrc/ast/resolved -Isrc/sema -Isrc/sema
 
 .PHONY: all frontend semantic tests clean
 
-all: build/main.out tests
+all: build/main.out build/matmaxc.out tests
 
 # Compilation
 build/%.o: src/%.cpp
@@ -39,6 +39,14 @@ build/libsema.a: $(SEMANTIC)
 	ar rcs $@ $^
 semantic: build/libsema.a
 
+# LLVM backend: code generator, runtime library, compiler driver
+build/codegen.o: src/codegen/codegen.cpp src/codegen/codegen.hpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+build/runtime.o: src/runtime/runtime.c src/runtime/runtime.h
+	gcc -std=c11 -O2 -Wall -c $< -o $@
+build/matmaxc.o: src/matmaxc.cpp
+	$(CXX) $(CXXFLAGS) -DMATMAX_RUNTIME='"$(CURDIR)/build/runtime.o"' -c $< -o $@
+
 # Tests
 tests: build/test_lex.out build/test_parse.out build/test_resolved.out
 build/test_%.o: validation/test_%.c
@@ -49,6 +57,8 @@ build/test_%.o: validation/test_%.cpp
 # Entry Points
 build/main.out: build/main.o frontend semantic
 	$(CXX) build/main.o build/parse.o build/lex.o build/ast_parser.o build/libsema.a -o $@
+build/matmaxc.out: build/matmaxc.o build/codegen.o build/runtime.o frontend semantic
+	$(CXX) build/matmaxc.o build/codegen.o build/parse.o build/lex.o build/ast_parser.o build/libsema.a -o $@
 build/test_lex.out: build/test_lex.o frontend
 	$(CXX) build/test_lex.o build/parse.o build/lex.o build/ast_parser.o -o $@
 build/test_parse.out: build/test_parse.o frontend
