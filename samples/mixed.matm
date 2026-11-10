@@ -12,6 +12,11 @@ matrix MixedMatrix {
                 result += text;
             ret result;
         }
+
+                // two strings: join them, so "even" * "x" is "evenx"
+        string * string >> string: (a, b) {
+            ret a + b;
+        }
     ]
 };
 

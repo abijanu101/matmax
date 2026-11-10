@@ -120,8 +120,16 @@ void mm_class_subop(MType *cls, int32_t op, MType *left, MType *right,
                     MType *result, MFn2 fn, int32_t swap)
 {
     cls->subops = realloc(cls->subops, sizeof(Subop) * (size_t)(cls->n_subops + 1));
-    Subop s = {op, left, right, result, fn, swap};
+    Subop s = {op, left, right, result, fn, swap, NULL, NULL};
     cls->subops[cls->n_subops++] = s;
+}
+
+void mm_class_subop_ctx(MType *cls, int32_t op, MType *left, MType *right,
+                        MType *result, MCtxFn2 fn, void *ctx, int32_t swap)
+{
+    mm_class_subop(cls, op, left, right, result, NULL, swap);
+    cls->subops[cls->n_subops - 1].ctx_fn = fn;
+    cls->subops[cls->n_subops - 1].ctx = ctx;
 }
 
 /* The type of a value: a primitive, or the matrix's class (may be NULL). */
@@ -482,7 +490,14 @@ static MValue *element_op(MType *cls, int op, MValue *x, MValue *y)
         fail("matrix '%s' has no subop for %s %s %s", cls->name,
              lt ? lt->name : "matrix", op_text(op), rt ? rt->name : "matrix");
 
-    MValue *r = s->fn ? (s->swap ? s->fn(y, x) : s->fn(x, y)) : mm_binop(op, x, y);
+    /* A commuted copy (swap) calls the body with its arguments swapped. */
+    MValue *r;
+    if (s->fn)
+        r = s->swap ? s->fn(y, x) : s->fn(x, y);
+    else if (s->ctx_fn)
+        r = s->swap ? s->ctx_fn(s->ctx, y, x) : s->ctx_fn(s->ctx, x, y);
+    else
+        r = mm_binop(op, x, y);
     if (!r)
         fail("the subop for '%s' in '%s' ended without 'ret'", op_text(op), cls->name);
     return s->result ? mm_assign(r, s->result) : r;
@@ -662,7 +677,34 @@ static MValue *sub_matrix(Matrix *m, int64_t r0, int64_t r1, int64_t c0, int64_t
     return r;
 }
 
+/* Calls the apply body: a compiled function, or an interpreter callback. */
+typedef struct
+{
+    MFn1 fn;
+    MCtxFn1 ctx_fn;
+    void *ctx;
+} Body;
+
+static MValue *call_body(Body *b, MValue *x)
+{
+    return b->fn ? b->fn(x) : b->ctx_fn(b->ctx, x);
+}
+
+static void apply_body(MValue *mv, int32_t region, Body *body);
+
 void mm_apply(MValue *mv, int32_t region, MFn1 fn)
+{
+    Body body = {fn, NULL, NULL};
+    apply_body(mv, region, &body);
+}
+
+void mm_apply_ctx(MValue *mv, int32_t region, MCtxFn1 fn, void *ctx)
+{
+    Body body = {NULL, fn, ctx};
+    apply_body(mv, region, &body);
+}
+
+static void apply_body(MValue *mv, int32_t region, Body *body)
 {
     Matrix *m = need_matrix(mv, "'apply'");
 
@@ -671,7 +713,7 @@ void mm_apply(MValue *mv, int32_t region, MFn1 fn)
         /* A body that ends without `ret` keeps the element unchanged. */
         for (int64_t k = 0; k < m->rows * m->cols; ++k)
         {
-            MValue *r = fn(m->cells[k]);
+            MValue *r = call_body(body, m->cells[k]);
             if (r)
                 m->cells[k] = fit_element(m->cls, r);
         }
@@ -684,7 +726,7 @@ void mm_apply(MValue *mv, int32_t region, MFn1 fn)
     {
         MValue *part = region == REGION_ROW ? sub_matrix(m, p, p + 1, 0, m->cols)
                                             : sub_matrix(m, 0, m->rows, p, p + 1);
-        MValue *r = fn(part);
+        MValue *r = call_body(body, part);
         if (!r)
             continue;
         Matrix *rm = need_matrix(r, "'apply' on a row or column");

@@ -3,7 +3,7 @@ CXXFLAGS = -Wall -Isrc -Isrc/ast/parser -Isrc/ast/resolved -Isrc/sema -Isrc/sema
 
 .PHONY: all frontend semantic tests clean
 
-all: build/main.out build/matmaxc.out tests
+all: build/main.out build/matmaxc.out build/interpret.out tests
 
 # Compilation
 build/%.o: src/%.cpp
@@ -47,6 +47,10 @@ build/runtime.o: src/runtime/runtime.c src/runtime/runtime.h
 build/matmaxc.o: src/matmaxc.cpp
 	$(CXX) $(CXXFLAGS) -DMATMAX_RUNTIME='"$(CURDIR)/build/runtime.o"' -c $< -o $@
 
+# Tree-walking interpreter (uses the same runtime library)
+build/interpreter.o: src/interpreter/interpreter.cpp src/interpreter/interpreter.hpp
+	$(CXX) $(CXXFLAGS) -c $< -o $@
+
 # Tests
 tests: build/test_lex.out build/test_parse.out build/test_resolved.out
 build/test_%.o: validation/test_%.c
@@ -59,6 +63,8 @@ build/main.out: build/main.o frontend semantic
 	$(CXX) build/main.o build/parse.o build/lex.o build/ast_parser.o build/libsema.a -o $@
 build/matmaxc.out: build/matmaxc.o build/codegen.o build/runtime.o frontend semantic
 	$(CXX) build/matmaxc.o build/codegen.o build/parse.o build/lex.o build/ast_parser.o build/libsema.a -o $@
+build/interpret.out: build/interpret.o build/interpreter.o build/runtime.o frontend semantic
+	$(CXX) build/interpret.o build/interpreter.o build/runtime.o build/parse.o build/lex.o build/ast_parser.o build/libsema.a -o $@
 build/test_lex.out: build/test_lex.o frontend
 	$(CXX) build/test_lex.o build/parse.o build/lex.o build/ast_parser.o -o $@
 build/test_parse.out: build/test_parse.o frontend

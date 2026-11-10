@@ -18,6 +18,10 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef enum
 {
     T_BOOL,
@@ -46,6 +50,11 @@ typedef struct MType MType;
 typedef MValue *(*MFn1)(MValue *);
 typedef MValue *(*MFn2)(MValue *, MValue *);
 
+/* Callbacks with a context pointer, for the interpreter: its function
+ * bodies are tree nodes, not compiled C functions. */
+typedef MValue *(*MCtxFn1)(void *ctx, MValue *);
+typedef MValue *(*MCtxFn2)(void *ctx, MValue *, MValue *);
+
 /* One element-wise rule of a matrix class: `left op right >> result`. */
 typedef struct
 {
@@ -54,6 +63,8 @@ typedef struct
     MType *result;   /* result is converted to this; NULL = keep as is */
     MFn2 fn;         /* the subop's function, or NULL for "infer: default" */
     int swap;        /* 1 for a commuted copy: call fn(right, left) */
+    MCtxFn2 ctx_fn;  /* interpreter: used instead of fn when set */
+    void *ctx;
 } Subop;
 
 /* A type: one of the primitives, or a matrix class. */
@@ -106,6 +117,8 @@ MType *mm_class_new(const char *name);
 void mm_class_elem(MType *cls, MType *elem);
 void mm_class_subop(MType *cls, int32_t op, MType *left, MType *right,
                     MType *result, MFn2 fn, int32_t swap);
+void mm_class_subop_ctx(MType *cls, int32_t op, MType *left, MType *right,
+                        MType *result, MCtxFn2 fn, void *ctx, int32_t swap);
 
 /* ---- storing ---- */
 MValue *mm_assign(MValue *v, MType *type);   /* convert (and copy matrices) */
@@ -121,6 +134,7 @@ int64_t mm_count(MValue *v);
 /* ---- matrices ---- */
 void mm_init(MValue *m, int32_t mode, MValue *value);
 void mm_apply(MValue *m, int32_t region, MFn1 fn);
+void mm_apply_ctx(MValue *m, int32_t region, MCtxFn1 fn, void *ctx);
 MValue *mm_index(MValue *m, MValue *r0, MValue *r1, MValue *c0, MValue *c1, int32_t ranges);
 void mm_set_index(MValue *m, MValue *r0, MValue *r1, MValue *c0, MValue *c1,
                   int32_t ranges, MValue *v);
@@ -142,5 +156,9 @@ MValue *mm_normalize(MValue *m);
 
 /* ---- output ---- */
 void mm_write(MValue *file, MValue *v);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
