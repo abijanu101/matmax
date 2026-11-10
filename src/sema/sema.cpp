@@ -5,7 +5,8 @@
 
 SemanticResult *analyze(ParserASTNode *tree)
 {
-    SemanticResult *res = new SemanticResult();
+    // unique_ptr: if a pass throws a SemanticError, the result is freed.
+    std::unique_ptr<SemanticResult> res(new SemanticResult());
 
     // Pass 1: Normalization
     NormalizingVisitor v1;
@@ -13,7 +14,7 @@ SemanticResult *analyze(ParserASTNode *tree)
     res->tree = v1.get_result().release();
 
     if (!res->tree)
-        return res;
+        return res.release();
 
     // Pass 2: Declaration scanning
     DeclarationScanningVisitor v2(res->st);
@@ -32,5 +33,5 @@ SemanticResult *analyze(ParserASTNode *tree)
     OperationResolutionVisitor v5(res->st, e);
     res->tree->accept(v5);
 
-    return res;
+    return res.release();
 }

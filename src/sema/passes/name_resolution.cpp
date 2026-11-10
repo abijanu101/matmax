@@ -1,260 +1,151 @@
 #include "passes.hpp"
 #include <memory>
+#include "type_rules.hpp"
 #include "../errors.hpp"
 #include "../../symbols/matrix.hpp"
+
+// Pass 3: scopes. Walks the program in order, declares each variable
+// when its declaration is reached, and links every name to its symbol.
 
 NameResolutionVisitor::NameResolutionVisitor(SymbolTable &st, SemanticEnvironment &env)
     : st(st), env(env)
 {
-    // Populate the global environment frame with all symbols currently in SymbolTable
+    // The global frame starts with the type and builtin names only, so a
+    // variable cannot reuse them. Variables are added as they are declared.
     for (size_t i = 0; i < st.size(); ++i)
     {
         Symbol *sym = st.get(i);
-        if (sym && !env.contains_current(sym->name))
-        {
+        if ((dynamic_cast<Type *>(sym) || dynamic_cast<Builtin *>(sym)) &&
+            !env.contains_current(sym->name))
             env.push(sym->name, i);
-        }
     }
 }
 
-void NameResolutionVisitor::visit(ProgramNode *node)
+Variable *NameResolutionVisitor::declare(const std::string &name, Type *type, int line)
 {
-    if (!node)
-        return;
-    for (const auto &item : node->items)
-    {
-        if (item)
-            item->accept(*this);
-    }
+    // A type or builtin name cannot be reused for a variable, even in an inner scope.
+    if (st.lookup_type(name) || st.lookup_builtin(name))
+        throw RedefinitionError(name, line);
+
+    unsigned int idx = st.size();
+    auto var = std::make_unique<Variable>(name, type);
+    Variable *v = var.get();
+    st.push_owned(std::move(var));
+    env.push(name, idx, line); // throws if the name already exists in this scope
+    return v;
 }
 
-void NameResolutionVisitor::visit(MatrixClassDeclarationNode *node)
+Variable *NameResolutionVisitor::resolve_variable(const std::string &name, int line)
 {
-    if (!node)
-        return;
-    for (auto &cop : node->matrix_operations)
-    {
-        if (cop && cop->definition)
-            cop->definition->accept(*this);
-    }
-    for (auto &spec : node->elementwise_operations)
-    {
-        if (spec.definition)
-            spec.definition->accept(*this);
-    }
-}
-
-void NameResolutionVisitor::visit(MatrixOperationDeclarationNode *node)
-{
-    if (node && node->definition)
-        node->definition->accept(*this);
+    Symbol *sym = st.get(env.get(name, line)); // throws if undeclared
+    auto *v = dynamic_cast<Variable *>(sym);
+    if (!v)
+        throw TypeError("'" + name + "' is a " +
+                            (dynamic_cast<Type *>(sym) ? "type" : "function") +
+                            ", not a variable.",
+                        line);
+    return v;
 }
 
 void NameResolutionVisitor::visit(VariableDeclarationNode *node)
 {
-    if (!node)
-        return;
-    if (node->initializer)
-        node->initializer->accept(*this);
+    // Initializer first: in `int a = a;` the right-hand `a` is not the new variable.
+    go(node->initializer.get());
 
-    if (!env.contains_current(node->name))
-    {
-        unsigned int idx = st.size();
-        auto var = std::make_unique<Variable>(node->name, node->type.resolved);
-        st.push_owned(std::move(var));
-        env.push(node->name, idx);
-    }
+    node->type.resolved = st.lookup_type(node->type.name);
+    if (!node->type.resolved)
+        throw UndefinedError(node->type.name, node->line);
+
+    node->symbol = declare(node->name, node->type.resolved, node->line);
 }
 
 void NameResolutionVisitor::visit(FunctionDefinitionNode *node)
 {
-    if (!node)
-        return;
     env.push_frame();
+
+    // Parameter types are filled in by TypeAnalysisVisitor.
+    node->parameter_symbols.clear();
     for (const auto &param : node->parameters)
-    {
-        auto pvar = std::make_unique<Variable>(param, nullptr);
-        unsigned int pidx = st.size();
-        st.push_owned(std::move(pvar));
-        env.push(param, pidx);
-    }
-    if (node->body)
-        node->body->accept(*this);
-    env.pop_frame();
+        node->parameter_symbols.push_back(declare(param, nullptr, node->line));
+
+    function_depth++;
+    go(node->body.get());
+    function_depth--;
+
+    env.pop_frame(node->line);
 }
 
 void NameResolutionVisitor::visit(BlockNode *node)
 {
-    if (!node)
-        return;
     env.push_frame();
-    for (const auto &stmt : node->statements)
-    {
-        if (stmt)
-            stmt->accept(*this);
-    }
-    env.pop_frame();
-}
-
-void NameResolutionVisitor::visit(AssignmentNode *node)
-{
-    if (!node)
-        return;
-    if (node->target)
-        node->target->accept(*this);
-    if (node->value)
-        node->value->accept(*this);
+    for (auto &stmt : node->statements)
+        go(stmt.get());
+    env.pop_frame(node->line);
 }
 
 void NameResolutionVisitor::visit(MatrixInitializationNode *node)
 {
-    if (!node)
-        return;
-    // Ensure the matrix identifier is defined
-    env.get(node->matrix_name);
-    if (node->expression)
-        node->expression->accept(*this);
+    node->matrix_symbol = resolve_variable(node->matrix_name, node->line);
+    go(node->expression.get());
 }
 
 void NameResolutionVisitor::visit(MatrixApplicationNode *node)
 {
-    if (!node)
-        return;
-    // Ensure the matrix identifier is defined
-    env.get(node->matrix_name);
-    if (node->function)
-        node->function->accept(*this);
+    node->matrix_symbol = resolve_variable(node->matrix_name, node->line);
+    go(node->function.get());
 }
 
 void NameResolutionVisitor::visit(WriteNode *node)
 {
-    if (!node)
-        return;
-    // Ensure the stream identifier is defined
-    env.get(node->stream_name);
-    if (node->expression)
-        node->expression->accept(*this);
-}
-
-void NameResolutionVisitor::visit(IfNode *node)
-{
-    if (!node)
-        return;
-    if (node->condition)
-        node->condition->accept(*this);
-    if (node->then_block)
-        node->then_block->accept(*this);
-    if (node->else_block)
-        node->else_block->accept(*this);
+    node->stream_symbol = resolve_variable(node->stream_name, node->line);
+    go(node->expression.get());
 }
 
 void NameResolutionVisitor::visit(ForNode *node)
 {
-    if (!node)
-        return;
-    if (node->range)
-        node->range->accept(*this);
+    go(node->range.get());
 
+    // The loop variable lives in its own frame around the body.
+    // TypeAnalysisVisitor changes its type to the range's type if needed.
     env.push_frame();
-    Type *uint_t = st.lookup_type("uint");
-    auto loop_var = std::make_unique<Variable>(node->variable_name, uint_t);
-    unsigned int lidx = st.size();
-    st.push_owned(std::move(loop_var));
-    env.push(node->variable_name, lidx);
-
-    if (node->body)
-        node->body->accept(*this);
-    env.pop_frame();
+    node->variable_symbol = declare(node->variable_name, st.lookup_type("uint"), node->line);
+    go(node->body.get());
+    env.pop_frame(node->line);
 }
 
 void NameResolutionVisitor::visit(ReturnNode *node)
 {
-    if (node && node->expression)
-        node->expression->accept(*this);
-}
-
-void NameResolutionVisitor::visit(BinaryOperationNode *node)
-{
-    if (!node)
-        return;
-    if (node->lhs)
-        node->lhs->accept(*this);
-    if (node->rhs)
-        node->rhs->accept(*this);
-}
-
-void NameResolutionVisitor::visit(UnaryOperationNode *node)
-{
-    if (node && node->operand)
-        node->operand->accept(*this);
+    if (function_depth == 0)
+        throw MiscError("'ret' can only be used inside a function.", node->line);
+    go(node->expression.get());
 }
 
 void NameResolutionVisitor::visit(FunctionCallNode *node)
 {
-    if (!node)
-        return;
-    for (const auto &arg : node->arguments)
+    for (auto &arg : node->arguments)
+        go(arg.get());
+
+    if (Builtin *b = st.lookup_builtin(node->name))
     {
-        if (arg)
-            arg->accept(*this);
+        node->resolved_function = b;
+        return;
     }
+
+    // A custom matrix operation. If several classes define this name,
+    // TypeAnalysisVisitor picks the one that fits the argument types.
+    if (auto *ops = st.lookup_custom(node->name))
+    {
+        node->resolved_function = (*ops)[0];
+        return;
+    }
+
     if (env.contains(node->name))
-    {
-        unsigned int fidx = env.get(node->name);
-        node->resolved_function = dynamic_cast<Function *>(st.get(fidx));
-    }
-    else
-    {
-        node->resolved_function = dynamic_cast<Function *>(st.lookup(node->name));
-    }
-}
+        throw TypeError("'" + node->name + "' is not a function.", node->line);
 
-void NameResolutionVisitor::visit(RegionNode *) {}
-
-void NameResolutionVisitor::visit(IndexNode *node)
-{
-    if (!node)
-        return;
-    if (node->matrix)
-        node->matrix->accept(*this);
-    if (node->row)
-        node->row->accept(*this);
-    if (node->column)
-        node->column->accept(*this);
-}
-
-void NameResolutionVisitor::visit(RangeNode *node)
-{
-    if (!node)
-        return;
-    if (node->from)
-        node->from->accept(*this);
-    if (node->to)
-        node->to->accept(*this);
-}
-
-void NameResolutionVisitor::visit(MatrixLiteralNode *node)
-{
-    if (!node)
-        return;
-    for (const auto &elem : node->elements)
-    {
-        if (elem)
-            elem->accept(*this);
-    }
+    throw UndefinedError(node->name, node->line);
 }
 
 void NameResolutionVisitor::visit(IdentifierNode *node)
 {
-    if (!node)
-        return;
-    unsigned int idx = env.get(node->name);
-    node->resolved_symbol = st.get(idx);
+    node->resolved_symbol = resolve_variable(node->name, node->line);
 }
-
-void NameResolutionVisitor::visit(StreamNode *) {}
-void NameResolutionVisitor::visit(IntegerLiteralNode *) {}
-void NameResolutionVisitor::visit(UnsignedIntegerLiteralNode *) {}
-void NameResolutionVisitor::visit(DoubleLiteralNode *) {}
-void NameResolutionVisitor::visit(CharacterLiteralNode *) {}
-void NameResolutionVisitor::visit(StringLiteralNode *) {}

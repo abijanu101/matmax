@@ -2,8 +2,40 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include "type_rules.hpp"
 #include "../errors.hpp"
 #include "../../symbols/matrix.hpp"
+
+// Pass 2: registers every matrix class, its element types, its custom
+// operations and its element-wise rules (subops). Runs before name
+// resolution, so a matrix class can be used before the line it is defined on.
+
+namespace
+{
+    Type *require_type(SymbolTable &st, TypeReference &ref, int line)
+    {
+        if (!ref.resolved)
+            ref.resolved = st.lookup_type(ref.name);
+        if (!ref.resolved)
+            throw UndefinedError(ref.name, line);
+        return ref.resolved;
+    }
+
+    bool contains(const std::vector<Type *> &types, Type *t)
+    {
+        for (Type *x : types)
+            if (x == t)
+                return true;
+        return false;
+    }
+
+    std::string signature(const std::string &op, const std::vector<Type *> &args)
+    {
+        if (args.size() == 2)
+            return rules::name(args[0]) + " " + op + " " + rules::name(args[1]);
+        return op;
+    }
+}
 
 DeclarationScanningVisitor::DeclarationScanningVisitor(SymbolTable &st)
     : st(st)
@@ -12,167 +44,150 @@ DeclarationScanningVisitor::DeclarationScanningVisitor(SymbolTable &st)
 
 void DeclarationScanningVisitor::visit(ProgramNode *node)
 {
-    if (!node)
-        return;
-    for (const auto &item : node->items)
-    {
-        if (item)
-            item->accept(*this);
-    }
+    // Only matrix classes are hoisted. Variables are declared in order
+    // by NameResolutionVisitor, so using one before it exists is an error.
+    for (auto &item : node->items)
+        if (auto *matrix = dynamic_cast<MatrixClassDeclarationNode *>(item.get()))
+            visit(matrix);
 }
 
 void DeclarationScanningVisitor::visit(MatrixClassDeclarationNode *node)
 {
-    if (!node)
-        return;
+    const int line = node->line;
 
-    std::vector<Type *> resolved_element_types;
-    for (auto &elem : node->element_types)
+    if (st.lookup_type(node->name) || st.lookup_builtin(node->name))
+        throw RedefinitionError(node->name, line);
+
+    // 1. Element types. They must already exist, so a class cannot contain itself.
+    std::vector<Type *> elements;
+    for (auto &ref : node->element_types)
     {
-        Type *t = st.lookup_type(elem.name);
-        if (!t)
-            throw UndefinedError(elem.name);
-        elem.resolved = t;
-        resolved_element_types.push_back(t);
+        Type *t = require_type(st, ref, line);
+        if (contains(elements, t))
+            throw TypeError("Type '" + t->name + "' is listed twice in matrix '" +
+                                node->name + "'.",
+                            line);
+        elements.push_back(t);
     }
 
-    auto mc = std::make_unique<MatrixClass>(node->name, resolved_element_types);
-    MatrixClass *mc_ptr = mc.get();
-    st.push_owned(std::move(mc));
+    auto owned = std::make_unique<MatrixClass>(node->name, elements);
+    MatrixClass *mc = owned.get();
+    mc->permitted_operators = node->permitted_operators;
+    st.push_owned(std::move(owned));
+    node->symbol = mc;
 
-    // Elementwise operations
-    for (auto &spec : node->elementwise_operations)
-    {
-        std::vector<Variable> params;
-        for (size_t i = 0; i < spec.argument_types.size(); ++i)
-        {
-            auto &atype = spec.argument_types[i];
-            if (!atype.resolved && !atype.name.empty())
-                atype.resolved = st.lookup_type(atype.name);
-            std::string pname = "arg" + std::to_string(i);
-            if (spec.definition && i < spec.definition->parameters.size())
-                pname = spec.definition->parameters[i];
-            params.emplace_back(pname, atype.resolved);
-        }
-
-        Type *rettype = nullptr;
-        if (spec.return_type.kind == ReturnTypeSpec::Kind::Concrete)
-        {
-            if (!spec.return_type.type.resolved && !spec.return_type.type.name.empty())
-                spec.return_type.type.resolved = st.lookup_type(spec.return_type.type.name);
-            rettype = spec.return_type.type.resolved;
-        }
-
-        auto mop = std::make_unique<MatrixOperation>(
-            spec.operation, mc_ptr, params, rettype,
-            spec.definition.get(), OperationKind::Builtin);
-        mc_ptr->add_operation(mop.get());
-        st.push_owned(std::move(mop));
-    }
-
-    // Custom operations
+    // 2. Custom operations (before the ops list, which may name them).
     for (auto &cop : node->matrix_operations)
     {
+        const int cline = cop->line ? cop->line : line;
+
+        if (st.lookup_builtin(cop->name))
+            throw RedefinitionError(cop->name, cline);
+
+        if (cop->definition->parameters.size() != cop->parameter_types.size())
+            throw TypeError("Operation '" + cop->name + "' takes " +
+                                std::to_string(cop->parameter_types.size()) +
+                                " argument(s), but its function has " +
+                                std::to_string(cop->definition->parameters.size()) +
+                                " parameter(s).",
+                            cline);
+
+        std::vector<Type *> types;
         std::vector<Variable> params;
         for (size_t i = 0; i < cop->parameter_types.size(); ++i)
         {
-            auto &ptype = cop->parameter_types[i];
-            if (!ptype.resolved && !ptype.name.empty())
-                ptype.resolved = st.lookup_type(ptype.name);
-            std::string pname = "p" + std::to_string(i);
-            if (cop->definition && i < cop->definition->parameters.size())
-                pname = cop->definition->parameters[i];
-            params.emplace_back(pname, ptype.resolved);
+            Type *t = require_type(st, cop->parameter_types[i], cline);
+            types.push_back(t);
+            params.emplace_back(cop->definition->parameters[i], t);
         }
 
-        Type *rettype = nullptr;
-        if (cop->return_type.kind == ReturnTypeSpec::Kind::Concrete)
+        if (cop->return_type.kind == ReturnTypeSpec::Kind::InferDefault)
+            throw TypeError("Operation '" + cop->name + "' needs a result type.", cline);
+        Type *ret = require_type(st, cop->return_type.type, cline);
+
+        // The same name with the same argument types twice in one class.
+        if (auto *existing = mc->get_operations(cop->name))
+            for (MatrixOperation *op : *existing)
+            {
+                bool same = op->params.size() == types.size();
+                for (size_t i = 0; same && i < types.size(); ++i)
+                    same = op->params[i].type == types[i];
+                if (same)
+                    throw RedefinitionError(cop->name, cline);
+            }
+
+        auto op = std::make_unique<MatrixOperation>(
+            cop->name, mc, params, ret, cop->definition.get(), OperationKind::Custom);
+        cop->symbol = op.get();
+        mc->add_operation(op.get());
+        st.push_owned(std::move(op));
+    }
+
+    // 3. The ops list may only name operators, tran, or this class's customs.
+    for (const auto &op : node->permitted_operators)
+    {
+        if (!rules::is_binary_operator(op) && op != "tran" && !mc->get_operations(op))
+            throw TypeError("'" + op + "' in the ops list of '" + node->name +
+                                "' is not an operator or a custom operation of this matrix.",
+                            line);
+    }
+
+    // 4. Element-wise rules (subops).
+    for (auto &spec : node->elementwise_operations)
+    {
+        if (!mc->permits(spec.operation))
+            throw TypeError("Matrix '" + node->name + "' has a subop for '" +
+                                spec.operation + "', but '" + spec.operation +
+                                "' is not in its ops list.",
+                            line);
+
+        std::vector<Type *> args;
+        for (auto &ref : spec.argument_types)
+            args.push_back(require_type(st, ref, line));
+
+        for (Type *t : args)
+            if (!contains(elements, t))
+                throw TypeError("Subop '" + signature(spec.operation, args) + "' uses '" +
+                                    t->name + "', which is not an element type of '" +
+                                    node->name + "'.",
+                                line);
+
+        Type *ret = nullptr;
+        if (spec.return_type.kind == ReturnTypeSpec::Kind::InferDefault)
         {
-            if (!cop->return_type.type.resolved && !cop->return_type.type.name.empty())
-                cop->return_type.type.resolved = st.lookup_type(cop->return_type.type.name);
-            rettype = cop->return_type.type.resolved;
+            // "infer: default": the type both arguments convert to.
+            ret = args.size() == 2 ? rules::common_type(args[0], args[1]) : nullptr;
+            if (!ret)
+                throw TypeError("Cannot infer the result of '" +
+                                    signature(spec.operation, args) + "' in '" +
+                                    node->name + "'. Write the result type instead of default.",
+                                line);
+            spec.return_type.type.name = ret->name;
+            spec.return_type.type.resolved = ret;
+        }
+        else
+            ret = require_type(st, spec.return_type.type, line);
+
+        if (spec.definition && spec.definition->parameters.size() != 2)
+            throw TypeError("The function for subop '" + signature(spec.operation, args) +
+                                "' must have exactly 2 parameters.",
+                            line);
+
+        // Parameter i of this signature is implementation parameter order[i]
+        // (the order is {0,1}, or {1,0} for a commuted copy).
+        std::vector<Variable> params;
+        for (size_t i = 0; i < args.size(); ++i)
+        {
+            std::string pname = "arg" + std::to_string(i);
+            if (spec.definition && i < spec.implementation_argument_order.size())
+                pname = spec.definition->parameters[spec.implementation_argument_order[i]];
+            params.emplace_back(pname, args[i]);
         }
 
-        auto mop = std::make_unique<MatrixOperation>(
-            cop->name, mc_ptr, params, rettype,
-            cop->definition.get(), OperationKind::Custom);
-        mc_ptr->add_operation(mop.get());
-        st.push_owned(std::move(mop));
+        auto op = std::make_unique<MatrixOperation>(
+            spec.operation, mc, params, ret, spec.definition.get(), OperationKind::Builtin);
+        spec.symbol = op.get();
+        mc->add_operation(op.get());
+        st.push_owned(std::move(op));
     }
 }
-
-void DeclarationScanningVisitor::visit(MatrixOperationDeclarationNode *node)
-{
-    // Custom operations owned by a matrix class are scanned in MatrixClassDeclarationNode.
-    (void)node;
-}
-
-void DeclarationScanningVisitor::visit(VariableDeclarationNode *node)
-{
-    if (!node)
-        return;
-
-    if (!node->type.resolved && !node->type.name.empty() && node->type.name != "infer")
-    {
-        node->type.resolved = st.lookup_type(node->type.name);
-    }
-
-    auto var = std::make_unique<Variable>(node->name, node->type.resolved);
-    st.push_owned(std::move(var));
-}
-
-void DeclarationScanningVisitor::visit(FunctionDefinitionNode *node)
-{
-    if (node && node->body)
-        node->body->accept(*this);
-}
-
-void DeclarationScanningVisitor::visit(BlockNode *node)
-{
-    if (!node)
-        return;
-    for (const auto &stmt : node->statements)
-    {
-        if (stmt)
-            stmt->accept(*this);
-    }
-}
-
-void DeclarationScanningVisitor::visit(AssignmentNode *) {}
-void DeclarationScanningVisitor::visit(MatrixInitializationNode *) {}
-void DeclarationScanningVisitor::visit(MatrixApplicationNode *) {}
-void DeclarationScanningVisitor::visit(WriteNode *) {}
-
-void DeclarationScanningVisitor::visit(IfNode *node)
-{
-    if (!node)
-        return;
-    if (node->then_block)
-        node->then_block->accept(*this);
-    if (node->else_block)
-        node->else_block->accept(*this);
-}
-
-void DeclarationScanningVisitor::visit(ForNode *node)
-{
-    if (!node)
-        return;
-    if (node->body)
-        node->body->accept(*this);
-}
-
-void DeclarationScanningVisitor::visit(ReturnNode *) {}
-void DeclarationScanningVisitor::visit(BinaryOperationNode *) {}
-void DeclarationScanningVisitor::visit(UnaryOperationNode *) {}
-void DeclarationScanningVisitor::visit(FunctionCallNode *) {}
-void DeclarationScanningVisitor::visit(RegionNode *) {}
-void DeclarationScanningVisitor::visit(IndexNode *) {}
-void DeclarationScanningVisitor::visit(RangeNode *) {}
-void DeclarationScanningVisitor::visit(MatrixLiteralNode *) {}
-void DeclarationScanningVisitor::visit(IdentifierNode *) {}
-void DeclarationScanningVisitor::visit(StreamNode *) {}
-void DeclarationScanningVisitor::visit(IntegerLiteralNode *) {}
-void DeclarationScanningVisitor::visit(UnsignedIntegerLiteralNode *) {}
-void DeclarationScanningVisitor::visit(DoubleLiteralNode *) {}
-void DeclarationScanningVisitor::visit(CharacterLiteralNode *) {}
-void DeclarationScanningVisitor::visit(StringLiteralNode *) {}

@@ -102,4 +102,24 @@ public:
               definition) {}
 };
 
+// Builtin functions (len, sum, vstack, ...).
+// Their typing rules live in TypeAnalysisVisitor; `kind` lets later
+// stages (interpreter, LLVM) switch on the builtin without comparing names.
+enum class BuiltinKind
+{
+    Tran, Sum, Min, Max, Len, Rows, Cols, Vstack, Hstack, Zeros, Normalize
+};
+
+class Builtin : public Function
+{
+public:
+    BuiltinKind kind;
+
+    // Parameter types are left null: each builtin checks its own arguments.
+    Builtin(const std::string &name, BuiltinKind kind, size_t arity)
+        : Function(name, std::vector<Variable>(arity, Variable("arg", nullptr)),
+                   nullptr, nullptr),
+          kind(kind) {}
+};
+
 #endif

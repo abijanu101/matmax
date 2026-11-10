@@ -1,254 +1,71 @@
 #include "passes.hpp"
 #include <string>
 #include <vector>
+#include "type_rules.hpp"
 #include "../errors.hpp"
 #include "../../symbols/matrix.hpp"
+
+// Pass 5: for `A op B` where A or B is a matrix, find the element-wise
+// rule (subop) that will run on each pair of elements.
+//
+// If both element types are known here (one-type matrices, or a matrix
+// and a plain value), the rule is picked now and stored in
+// resolved_operation. If an element type is <dynamic> (a matrix with
+// several element types), resolved_operation stays null and the rule is
+// picked per element at run time from MatrixClass::get_operations().
 
 OperationResolutionVisitor::OperationResolutionVisitor(SymbolTable &st, SemanticEnvironment &env)
     : st(st), env(env)
 {
 }
 
-void OperationResolutionVisitor::visit(ProgramNode *node)
-{
-    if (!node)
-        return;
-    for (const auto &item : node->items)
-    {
-        if (item)
-            item->accept(*this);
-    }
-}
-
-void OperationResolutionVisitor::visit(MatrixClassDeclarationNode *node)
-{
-    if (!node)
-        return;
-    for (auto &cop : node->matrix_operations)
-    {
-        if (cop && cop->definition)
-            cop->definition->accept(*this);
-    }
-    for (auto &spec : node->elementwise_operations)
-    {
-        if (spec.definition)
-            spec.definition->accept(*this);
-    }
-}
-
-void OperationResolutionVisitor::visit(MatrixOperationDeclarationNode *node)
-{
-    if (node && node->definition)
-        node->definition->accept(*this);
-}
-
-void OperationResolutionVisitor::visit(VariableDeclarationNode *node)
-{
-    if (node && node->initializer)
-        node->initializer->accept(*this);
-}
-
-void OperationResolutionVisitor::visit(FunctionDefinitionNode *node)
-{
-    if (node && node->body)
-        node->body->accept(*this);
-}
-
-void OperationResolutionVisitor::visit(BlockNode *node)
-{
-    if (!node)
-        return;
-    for (const auto &stmt : node->statements)
-    {
-        if (stmt)
-            stmt->accept(*this);
-    }
-}
-
-void OperationResolutionVisitor::visit(AssignmentNode *node)
-{
-    if (!node)
-        return;
-    if (node->target)
-        node->target->accept(*this);
-    if (node->value)
-        node->value->accept(*this);
-}
-
-void OperationResolutionVisitor::visit(MatrixInitializationNode *node)
-{
-    if (node && node->expression)
-        node->expression->accept(*this);
-}
-
-void OperationResolutionVisitor::visit(MatrixApplicationNode *node)
-{
-    if (node && node->function)
-        node->function->accept(*this);
-}
-
-void OperationResolutionVisitor::visit(WriteNode *node)
-{
-    if (node && node->expression)
-        node->expression->accept(*this);
-}
-
-void OperationResolutionVisitor::visit(IfNode *node)
-{
-    if (!node)
-        return;
-    if (node->condition)
-        node->condition->accept(*this);
-    if (node->then_block)
-        node->then_block->accept(*this);
-    if (node->else_block)
-        node->else_block->accept(*this);
-}
-
-void OperationResolutionVisitor::visit(ForNode *node)
-{
-    if (!node)
-        return;
-    if (node->range)
-        node->range->accept(*this);
-    if (node->body)
-        node->body->accept(*this);
-}
-
-void OperationResolutionVisitor::visit(ReturnNode *node)
-{
-    if (node && node->expression)
-        node->expression->accept(*this);
-}
-
 void OperationResolutionVisitor::visit(BinaryOperationNode *node)
 {
-    if (!node)
+    go(node->lhs.get());
+    go(node->rhs.get());
+
+    Type *lt = node->lhs->resolved_type;
+    Type *rt = node->rhs->resolved_type;
+    const std::string &op = node->operation;
+
+    MatrixClass *mc = rules::as_matrix(lt) ? rules::as_matrix(lt) : rules::as_matrix(rt);
+    if (!mc || !rules::is_binary_operator(op))
         return;
 
-    if (node->lhs)
-        node->lhs->accept(*this);
-    if (node->rhs)
-        node->rhs->accept(*this);
+    // Element-wise rules for this operator (two-argument subops only).
+    std::vector<MatrixOperation *> rules_for_op;
+    if (auto *ops = mc->get_operations(op))
+        for (MatrixOperation *candidate : *ops)
+            if (candidate->kind == OperationKind::Builtin && candidate->params.size() == 2)
+                rules_for_op.push_back(candidate);
 
-    Type *lt = node->lhs ? node->lhs->resolved_type : nullptr;
-    Type *rt = node->rhs ? node->rhs->resolved_type : nullptr;
+    if (rules_for_op.empty())
+        throw TypeError("Matrix '" + mc->name + "' allows '" + op +
+                            "' but has no subop for it, so its elements cannot be combined.",
+                        node->line);
 
-    MatrixClass *mc = dynamic_cast<MatrixClass *>(lt);
-    if (!mc && rt)
-        mc = dynamic_cast<MatrixClass *>(rt);
+    // A matrix side contributes its element type, a plain value itself.
+    Type *le = lt == mc ? rules::element_type(lt) : lt;
+    Type *re = rt == mc ? rules::element_type(rt) : rt;
+    if (rules::is_dynamic(le) || rules::is_dynamic(re))
+        return; // picked per element at run time
 
-    if (mc)
-    {
-        const auto *ops = mc->get_operations(node->operation);
-        if (ops && !ops->empty())
+    // Prefer an exact match, then one reachable by widening (uint -> double, ...).
+    for (int exact = 1; exact >= 0; --exact)
+        for (MatrixOperation *candidate : rules_for_op)
         {
-            MatrixOperation *best_match = nullptr;
-            for (MatrixOperation *op : *ops)
+            Type *p0 = candidate->params[0].type;
+            Type *p1 = candidate->params[1].type;
+            bool fits = exact ? (p0 == le && p1 == re)
+                              : (rules::assignable(le, p0) && rules::assignable(re, p1));
+            if (fits)
             {
-                if (op->params.size() == 2)
-                {
-                    Type *p0 = op->params[0].type;
-                    Type *p1 = op->params[1].type;
-
-                    bool m0 = (p0 == lt) || (p0 && lt && p0->name == lt->name);
-                    bool m1 = (p1 == rt) || (p1 && rt && p1->name == rt->name);
-
-                    if (!m0 && mc->element_types.size() > 0 && lt == mc)
-                    {
-                        for (Type *et : mc->element_types)
-                        {
-                            if (p0 == et || (p0 && et && p0->name == et->name))
-                            {
-                                m0 = true;
-                                break;
-                            }
-                        }
-                    }
-                    if (!m1 && mc->element_types.size() > 0 && rt == mc)
-                    {
-                        for (Type *et : mc->element_types)
-                        {
-                            if (p1 == et || (p1 && et && p1->name == et->name))
-                            {
-                                m1 = true;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (m0 && m1)
-                    {
-                        best_match = op;
-                        break;
-                    }
-                }
+                node->resolved_operation = candidate;
+                return;
             }
-
-            if (!best_match)
-                best_match = (*ops)[0];
-
-            node->resolved_operation = best_match;
         }
-    }
+
+    throw TypeError("Matrix '" + mc->name + "' has no subop for " + rules::name(le) + " " + op +
+                        " " + rules::name(re) + ".",
+                    node->line);
 }
-
-void OperationResolutionVisitor::visit(UnaryOperationNode *node)
-{
-    if (node && node->operand)
-        node->operand->accept(*this);
-}
-
-void OperationResolutionVisitor::visit(FunctionCallNode *node)
-{
-    if (!node)
-        return;
-    for (const auto &arg : node->arguments)
-    {
-        if (arg)
-            arg->accept(*this);
-    }
-}
-
-void OperationResolutionVisitor::visit(RegionNode *) {}
-
-void OperationResolutionVisitor::visit(IndexNode *node)
-{
-    if (!node)
-        return;
-    if (node->matrix)
-        node->matrix->accept(*this);
-    if (node->row)
-        node->row->accept(*this);
-    if (node->column)
-        node->column->accept(*this);
-}
-
-void OperationResolutionVisitor::visit(RangeNode *node)
-{
-    if (!node)
-        return;
-    if (node->from)
-        node->from->accept(*this);
-    if (node->to)
-        node->to->accept(*this);
-}
-
-void OperationResolutionVisitor::visit(MatrixLiteralNode *node)
-{
-    if (!node)
-        return;
-    for (const auto &elem : node->elements)
-    {
-        if (elem)
-            elem->accept(*this);
-    }
-}
-
-void OperationResolutionVisitor::visit(IdentifierNode *) {}
-void OperationResolutionVisitor::visit(StreamNode *) {}
-void OperationResolutionVisitor::visit(IntegerLiteralNode *) {}
-void OperationResolutionVisitor::visit(UnsignedIntegerLiteralNode *) {}
-void OperationResolutionVisitor::visit(DoubleLiteralNode *) {}
-void OperationResolutionVisitor::visit(CharacterLiteralNode *) {}
-void OperationResolutionVisitor::visit(StringLiteralNode *) {}

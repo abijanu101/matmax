@@ -50,6 +50,17 @@ public:
     // Permitted element types for this matrix class.
     std::vector<Type *> element_types;
 
+        // The `ops:` list: operators allowed on whole matrices of this class.
+    std::vector<std::string> permitted_operators;
+
+    bool permits(const std::string &op) const
+    {
+        for (const auto &p : permitted_operators)
+            if (p == op)
+                return true;
+        return false;
+    }
+
     MatrixClass(
         const std::string &name,
         const std::vector<Type *> &element_types

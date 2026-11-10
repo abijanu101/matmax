@@ -8,6 +8,7 @@
 #include "../src/ast/resolved/ast.hpp"
 #include "../src/ast/resolved/visitor.hpp"
 #include "../src/sema/sema.hpp"
+#include "../src/sema/errors.hpp"
 #include "../src/symbols/matrix.hpp"
 
 extern int yyparse(void);
@@ -490,12 +491,15 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    SemanticResult *sem = analyze(ast_root);
-    if (!sem || !sem->tree)
+    SemanticResult *sem = nullptr;
+    try
     {
-        std::cerr << "Error: Semantic analysis failed to produce a resolved AST.\n";
+        sem = analyze(ast_root);
+    }
+    catch (const SemanticError &e)
+    {
+        std::cerr << e.what() << "\n";
         ast_free(ast_root);
-        delete sem;
         return 1;
     }
 

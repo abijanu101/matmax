@@ -1,4 +1,3 @@
-
 #ifndef RESOLVED_AST_HPP
 #define RESOLVED_AST_HPP
 
@@ -121,6 +120,9 @@ struct ElementwiseOperationSpec
     // For example, a signature (float, int) can invoke an implementation
     // originally declared as (int, float) by reversing its arguments.
     std::vector<std::size_t> implementation_argument_order;
+
+    // Set by DeclarationScanningVisitor.
+    MatrixOperation *symbol = nullptr;
 };
 
 
@@ -149,6 +151,9 @@ class ResolvedASTNode
 {
 public:
     virtual ~ResolvedASTNode() = default;
+
+    // Source line, copied from the parser AST by NormalizingVisitor.
+    int line = 0;
 
     virtual void accept(ResolvedASTVisitor &visitor) = 0;
 };
@@ -214,6 +219,9 @@ public:
 
     std::unique_ptr<ExpressionNode> expression;
 
+    // Set by NameResolutionVisitor.
+    Variable *matrix_symbol = nullptr;
+
     RESOLVED_AST_ACCEPT(MatrixInitializationNode)
 };
 
@@ -226,6 +234,9 @@ public:
 
     std::unique_ptr<FunctionDefinitionNode> function;
 
+    // Set by NameResolutionVisitor.
+    Variable *matrix_symbol = nullptr;
+
     RESOLVED_AST_ACCEPT(MatrixApplicationNode)
 };
 
@@ -235,6 +246,9 @@ class WriteNode : public StatementNode
 public:
     std::string stream_name;
     std::unique_ptr<ExpressionNode> expression;
+
+    // Set by NameResolutionVisitor.
+    Variable *stream_symbol = nullptr;
 
     RESOLVED_AST_ACCEPT(WriteNode)
 };
@@ -259,6 +273,9 @@ public:
     std::unique_ptr<ExpressionNode> range;
     std::unique_ptr<BlockNode> body;
 
+    // Set by NameResolutionVisitor.
+    Variable *variable_symbol = nullptr;
+
     RESOLVED_AST_ACCEPT(ForNode)
 };
 
@@ -282,6 +299,9 @@ public:
     std::vector<std::string> parameters;
     std::unique_ptr<BlockNode> body;
 
+    // One Variable per parameter, set by NameResolutionVisitor.
+    std::vector<Variable *> parameter_symbols;
+
     RESOLVED_AST_ACCEPT(FunctionDefinitionNode)
 };
 
@@ -297,6 +317,9 @@ public:
     TypeReference type;
 
     std::unique_ptr<ExpressionNode> initializer;
+
+    // Set by NameResolutionVisitor.
+    Variable *symbol = nullptr;
 
     RESOLVED_AST_ACCEPT(VariableDeclarationNode)
 };
@@ -321,6 +344,9 @@ public:
     // Non-owning reference to the AST declaration that contains this operation.
     MatrixClassDeclarationNode *owner = nullptr;
 
+    // Set by DeclarationScanningVisitor.
+    MatrixOperation *symbol = nullptr;
+
     RESOLVED_AST_ACCEPT(MatrixOperationDeclarationNode)
 };
 
@@ -342,6 +368,9 @@ public:
     // CUSTOM_LIST: custom matrix-level operations.
     std::vector<std::unique_ptr<MatrixOperationDeclarationNode>>
         matrix_operations;
+
+    // Set by DeclarationScanningVisitor.
+    MatrixClass *symbol = nullptr;
 
     RESOLVED_AST_ACCEPT(MatrixClassDeclarationNode)
 };

@@ -58,6 +58,10 @@ namespace
             throw std::runtime_error(
                 "Normalizer failed to produce a result.");
 
+        // Copy the source line, unless the visit already chose a better one.
+        if (normalized_result->line == 0)
+            normalized_result->line = node->line;
+
         return std::move(normalized_result);
     }
 
@@ -195,6 +199,7 @@ namespace
             throw std::runtime_error("Expected BLOCK node.");
 
         auto function = std::make_unique<FunctionDefinitionNode>();
+        function->line = node->line;
 
         for (int i = 0; i < params->nchildren; ++i)
         {
@@ -392,6 +397,12 @@ namespace
 
         for (const auto &operation : matrix.permitted_operators)
         {
+            // Only binary operators get element rules; names like
+            // "tran" or "derivative" are not element-wise operations.
+            if (operation != "+" && operation != "-" &&
+                operation != "*" && operation != "/")
+                continue;
+
             for (const auto &type : matrix.element_types)
             {
                 insert_suboperation(
@@ -432,6 +443,7 @@ namespace
             std::make_unique<MatrixOperationDeclarationNode>();
 
         operation->name = node_text(node);
+        operation->line = node->line;
         operation->kind = OperationKind::Custom;
         operation->owner = owner;
         operation->return_type = normalize_return_type(return_node);
@@ -482,6 +494,7 @@ namespace
                 std::make_unique<VariableDeclarationNode>();
 
             declaration->name = node_text(variable);
+            declaration->line = variable->line;
             declaration->type = type;
 
             if (variable->nchildren == 1)
@@ -583,6 +596,10 @@ void NormalizingVisitor::visit_matrix_def(ParserASTNode *node)
     auto matrix = std::make_unique<MatrixClassDeclarationNode>();
 
     matrix->name = node_text(node);
+
+    // The MATRIX_DEF node is created at the closing "};", so the type
+    // list's line is closer to where the definition starts.
+    matrix->line = types->line;
 
     // Element types.
     if (types->kind != N_TYPE_LIST)
