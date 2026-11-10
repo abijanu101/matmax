@@ -1,0 +1,61 @@
+// Stress test: 1000 x 1000 numeric matrices (1,000,000 elements each).
+// Only small summaries are printed; every value can be checked by hand.
+
+matrix NumericMatrix {
+    types: [uint, int, double]
+    ops: [+, -, *]
+    subops: [
+        all + all >> infer: default;
+        all - all >> infer: default;
+        all * all >> infer: default;
+    ]
+};
+
+uint ROWS = 1000;
+uint COLS = 1000;
+
+NumericMatrix A, B;
+init A enumerate;       // 0, 1, 2, ..., 999999 (row by row)
+init B 2;
+
+// keep the even numbers, set the odd ones to 0
+apply A all >> infer:(x) {
+    if x % 2 == 0:
+        ret x;
+    ret 0;
+}
+
+file out = stdout;
+
+write out "elements in A:";
+write out len(A);                       // 1000000
+
+write out "sum of A (2 + 4 + ... + 999998):";
+write out sum A all;                    // 249999500000
+
+write out "largest and smallest element of A:";
+write out max A all;                    // 999998
+write out min A all;                    // 0
+
+// element-wise: D = A * 2 + 1
+NumericMatrix D = A * B + 1;
+write out "sum of D = 2 * sum(A) + 1000000:";
+write out sum D all;                    // 500000000000
+
+write out "top-left corner of D:";
+write out D[0:2, 0:4];                  // [1, 1, 5, 1] / [2001, 1, 2005, 1]
+
+// 10 more passes over a million elements (the GC keeps memory flat)
+for k inrange 10:
+    D = D + A;
+write out "sum of D after adding A ten times:";
+write out sum D all;                    // 2999995000000
+
+// structure operations
+write out "rows of tran(D), rows of vstack(A, B), columns of hstack(A, B):";
+write out rows(tran(D));                // 1000
+write out rows(vstack(A, B));           // 2000
+write out cols(hstack(A, B));           // 2000
+
+write out "column sums of A, first 3 columns:";
+write out (sum A col)[0:1, 0:3];        // [499500000, 0, 499502000]

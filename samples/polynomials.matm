@@ -20,6 +20,17 @@ matrix Polynomial {
 
             ret normalize(result);
         }
+
+        // custom binary operator: the value p(x), by Horner's rule
+        evaluate Polynomial double >> double: (p, x) {
+            uint n = len(p);
+            double value = 0.0;
+
+            for i inrange n:
+                value = value * x + p[0, n - 1 - i];
+
+            ret value;
+        }
     ]
 };
 
@@ -46,3 +57,64 @@ matrix PolynomialMatrix {
         }
     ]
 };
+
+// ---------------------------------------------------------------
+// Using the classes
+// ---------------------------------------------------------------
+file out = stdout;
+
+Polynomial p = [7.0, 8.0, 9.0];     // 7 + 8x + 9x^2
+Polynomial q = [1.0, 2.0, 3.0];     // 1 + 2x + 3x^2
+
+write out "p = 7 + 8x + 9x^2:";
+write out p;
+
+write out "p' = 8 + 18x:";
+write out derivative(p);
+
+write out "p'' = 18:";
+write out derivative(derivative(p));
+
+write out "p''' = 0:";
+write out derivative(derivative(derivative(p)));
+
+write out "p + q:";
+write out p + q;
+
+write out "p - q:";
+write out p - q;
+
+write out "p * 2 (a number with a whole polynomial):";
+write out p * 2;
+
+write out "p(2) = 7 + 16 + 36:";
+write out evaluate(p, 2.0);
+
+write out "p'(0.5) = 8 + 9:";
+write out evaluate(derivative(p), 0.5);
+
+write out "normalize drops trailing zero coefficients:";
+write out normalize([1.0, 2.0, 0.0, 0.0]);
+
+// A 2x2 matrix whose elements are polynomials
+PolynomialMatrix M = zeros(2, 2);
+M[0, 0] = p;
+M[0, 1] = q;
+M[1, 0] = derivative(p);
+M[1, 1] = [5.0];
+
+write out "M (each element is a polynomial):";
+write out M;
+
+write out "M + M:";
+write out M + M;
+
+write out "mul(M, 3):";
+write out mul(M, 3);
+
+// apply a custom operation to every element of the nested matrix
+apply M all >> infer:(e) {
+    ret derivative(e);
+}
+write out "M after differentiating every element:";
+write out M;

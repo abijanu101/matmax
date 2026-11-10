@@ -5,6 +5,9 @@ CXXFLAGS = -Wall -Isrc -Isrc/ast/parser -Isrc/ast/resolved -Isrc/sema -Isrc/sema
 DEPFLAGS = -MMD -MP
 CXXFLAGS += $(DEPFLAGS)
 
+# make sure the output folder exists (e.g. in a fresh copy of the project)
+$(shell mkdir -p build)
+
 .PHONY: all frontend semantic tests clean
 
 all: build/main.out build/matmaxc.out build/interpret.out tests

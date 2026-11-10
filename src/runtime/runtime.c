@@ -217,8 +217,10 @@ static MValue *copy_matrix(MValue *v)
 static int fits(MType *cls, MValue *v)
 {
     MType *t = type_of(v);
+    int classless = v->tag == T_MATRIX && !t; /* zeros(..) or [..] */
     for (int i = 0; i < cls->n_elems; ++i)
-        if (cls->elems[i] == t || widens_to(t, cls->elems[i]))
+        if (cls->elems[i] == t || widens_to(t, cls->elems[i]) ||
+            (classless && cls->elems[i]->tag == T_MATRIX))
             return 1;
     return 0;
 }
@@ -237,6 +239,13 @@ static MValue *fit_element(MType *cls, MValue *v)
     for (int i = 0; i < cls->n_elems; ++i)
         if (widens_to(t, cls->elems[i]))
             return mm_assign(v, cls->elems[i]);
+
+    /* A classless matrix (zeros(..) or [..]) becomes the first element
+     * type that is a matrix class, e.g. [5.0] -> Polynomial. */
+    if (v->tag == T_MATRIX && !t)
+        for (int i = 0; i < cls->n_elems; ++i)
+            if (cls->elems[i]->tag == T_MATRIX)
+                return mm_assign(v, cls->elems[i]);
 
     fail("a %s cannot be stored in matrix '%s'", type_name(v), cls->name);
     return NULL;
